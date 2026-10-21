@@ -26,6 +26,15 @@ class SettingsStore(context: Context) {
         putString(KEY_ROUTE, credentials.route.name)
     }
 
+    /** Проверка, принял ли пользователь лицензионное соглашение и отказ от ответственности. */
+    fun isTermsAccepted(): Boolean = prefs.getBoolean(KEY_TERMS_ACCEPTED, false)
+
+    /** Фиксация факта акцепта оферты и соглашения (ст. 438 ГК РФ). */
+    fun acceptTerms() = prefs.edit {
+        putBoolean(KEY_TERMS_ACCEPTED, true)
+        putLong(KEY_TERMS_ACCEPTED_AT, System.currentTimeMillis())
+    }
+
     /** Только список аккаунтов. Движок перечитывает его каждый цикл — аналог перезагрузки файла аккаунтов в Python. */
     fun loadAccounts(): List<Account> {
         val raw = prefs.getString(KEY_ACCOUNTS, null)
@@ -149,6 +158,8 @@ class SettingsStore(context: Context) {
         const val KEY_N_CHECKS = "notify_checks"
         const val KEY_N_SERVICE = "notify_service"
         const val KEY_N_CONTROL = "notify_control"
+        const val KEY_TERMS_ACCEPTED = "terms_accepted_v1"
+        const val KEY_TERMS_ACCEPTED_AT = "terms_accepted_at"
         const val DEFAULT_TIMEOUT = 30
 
         fun createPrefs(context: Context): SharedPreferences {

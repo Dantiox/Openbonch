@@ -103,9 +103,57 @@ fn get_authenticated_client() -> Result<BonchClient> {
     }
 }
 
+fn get_terms_path() -> PathBuf {
+    if let Some(proj_dirs) = ProjectDirs::from("org", "openbonch", "openbonch") {
+        let dir = proj_dirs.config_dir();
+        fs::create_dir_all(dir).ok();
+        dir.join("terms_accepted.json")
+    } else {
+        PathBuf::from(".openbonch_terms_accepted.json")
+    }
+}
+
+fn ensure_terms_accepted() -> anyhow::Result<()> {
+    let path = get_terms_path();
+    if path.exists() {
+        return Ok(());
+    }
+
+    println!("{}", "=========================================================================".cyan());
+    println!("{}", "  Openbonch — Пользовательское соглашение и условия (GNU AGPLv3)".bold().cyan());
+    println!("{}", "=========================================================================".cyan());
+    println!("1. Программа распространяется на условиях лицензии GNU AGPLv3 «КАК ЕСТЬ» (AS IS).");
+    println!("2. Автор и разработчики ПОЛНОСТЬЮ ОСВОБОЖДЕНЫ ОТ ОТВЕТСТВЕННОСТИ за пропуск занятий,");
+    println!("   несрабатывание автоотметки, академические взыскания или блокировки учетных записей.");
+    println!("3. Local-First: запросы отправляются напрямую с вашего IP, данные хранятся локально.");
+    println!("4. Полный текст условий: https://github.com/Dantiox/Openbonch/blob/main/TERMS_OF_USE.md");
+    println!("{}", "=========================================================================".cyan());
+    print!("\nВы подтверждаете согласие с лицензией AGPLv3 и отказ от ответственности? [y/N]: ");
+    use std::io::Write;
+    std::io::stdout().flush()?;
+
+    let mut input = String::new();
+    std::io::stdin().read_line(&mut input)?;
+    let ans = input.trim().to_lowercase();
+    if ans == "y" || ans == "yes" || ans == "д" || ans == "да" {
+        let obj = serde_json::json!({
+            "accepted": true,
+            "license": "GNU AGPLv3",
+            "accepted_at": chrono::Local::now().to_rfc3339()
+        });
+        fs::write(path, serde_json::to_string_pretty(&obj)?)?;
+        println!("{}", "✓ Условия использования приняты.\n".green());
+        Ok(())
+    } else {
+        eprintln!("{}", "Отказ: Использование программы без согласия с лицензией и условиями запрещено.".red());
+        std::process::exit(1);
+    }
+}
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+    ensure_terms_accepted()?;
 
     match cli.command {
         Commands::Login { email, password, token } => {

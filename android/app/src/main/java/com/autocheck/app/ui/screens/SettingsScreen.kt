@@ -52,6 +52,7 @@ import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material.icons.rounded.Settings as SettingsIcon
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
@@ -136,6 +137,7 @@ private enum class SettingsPage(val title: String, val icon: ImageVector) {
     Log("Журнал", Icons.Rounded.History),
     Appearance("Оформление", Icons.Rounded.Palette),
     Background("Работа в фоне", Icons.Rounded.BatteryChargingFull),
+    Legal("Лицензия и условия", Icons.Rounded.Security),
 }
 
 @Composable
@@ -215,6 +217,8 @@ fun SettingsScreen(vm: MainViewModel, bottomInset: Dp, resetSignal: Int) {
                         ignoringBattery = ignoringBattery,
                         onBack = { page = null },
                     )
+
+                    SettingsPage.Legal -> LegalPage(onBack = { page = null })
                 }
             }
         }
@@ -277,6 +281,8 @@ private fun summaryOf(page: SettingsPage, vm: MainViewModel, ignoringBattery: Bo
             val battery = if (ignoringBattery) "Оптимизация батареи отключена" else "Оптимизация батареи включена"
             "$battery · автозапуск ${if (vm.autoStart) "вкл" else "выкл"}"
         }
+
+        SettingsPage.Legal -> "GNU AGPLv3 · Отказ от ответственности"
     }
 
 // ───────────────────────── Разделы ─────────────────────────
@@ -748,6 +754,65 @@ private fun BackgroundPage(vm: MainViewModel, ignoringBattery: Boolean, onBack: 
                         "Дополнительных разрешений на этом устройстве, как правило, не нужно."
                     }
             )
+        }
+    }
+}
+
+@Composable
+private fun LegalPage(onBack: () -> Unit) {
+    PageScaffold {
+        PageHeader("Лицензия и условия", onBack)
+
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            GroupHeader("Свободная лицензия")
+            GroupedCard {
+                Box(Modifier.padding(16.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "GNU Affero General Public License v3",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = Ios.colors.label,
+                        )
+                        Text(
+                            text = "Openbonch — 100% бесплатное ПО с открытым исходным кодом. Лицензия AGPLv3 защищает код от закрытия: никто не имеет права делать платные или закрытые форки, в том числе через облачные серверы (Секция 13).",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Ios.colors.secondaryLabel,
+                        )
+                    }
+                }
+            }
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            GroupHeader("Отказ от ответственности (Секции 15–17)")
+            GroupedCard {
+                Box(Modifier.padding(16.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "Программа предоставляется «КАК ЕСТЬ» (AS IS). Автор не несёт ответственности за пропуск занятий, несрабатывание автоматической отметки, дисциплинарные меры, блокировку личного кабинета или сбои серверов СПбГУТ. Ответственность несёт пользователь.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Ios.colors.label,
+                        )
+                    }
+                }
+            }
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            GroupHeader("Архитектура Local-First")
+            GroupedCard {
+                Box(Modifier.padding(16.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "У приложения нет серверов сбора данных. Пароли хранятся строго локально в аппаратном Android KeyStore. Запросы отправляются напрямую с вашего IP-адреса (полное соответствие 152-ФЗ и ст. 272 УК РФ).",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Ios.colors.label,
+                        )
+                    }
+                }
+            }
+            GroupFooter("Репозиторий проекта: github.com/Dantiox/Openbonch")
         }
     }
 }

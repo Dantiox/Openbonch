@@ -76,6 +76,8 @@ import com.autocheck.app.ui.screens.MapScreen
 import com.autocheck.app.ui.screens.ResponseViewerScreen
 import com.autocheck.app.ui.screens.ScheduleScreen
 import com.autocheck.app.ui.screens.SettingsScreen
+import com.autocheck.app.ui.screens.TermsAgreementDialog
+import com.autocheck.app.data.SettingsStore
 import com.autocheck.app.ui.theme.Ios
 
 private enum class Tab(val label: String, val icon: ImageVector) {
@@ -98,6 +100,8 @@ fun AppRoot(vm: MainViewModel) {
     var reselect by remember { mutableIntStateOf(0) }
     var mapHighlightRoom by rememberSaveable { mutableStateOf<String?>(null) }
     val context = LocalContext.current
+    val store = remember { SettingsStore(context) }
+    var termsAccepted by rememberSaveable { mutableStateOf(store.isTermsAccepted()) }
 
     val status by AutoClickState.status.collectAsStateWithLifecycle()
     val stats by AutoClickState.stats.collectAsStateWithLifecycle()
@@ -225,6 +229,11 @@ fun AppRoot(vm: MainViewModel) {
                 lastViewed?.let { entry ->
                     ResponseViewerScreen(entry = entry, exporter = exporter, onClose = { viewingId = null })
                 }
+            }
+
+            // Обязательное лицензионное соглашение и отказ от ответственности при первом запуске
+            if (!termsAccepted) {
+                TermsAgreementDialog(onAccepted = { termsAccepted = true })
             }
 
             // Поверх всего, включая экран ответа сервера

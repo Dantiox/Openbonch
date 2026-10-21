@@ -645,6 +645,19 @@ the "copyright" line and a pointer to where the full notice is found.
     You should have received a copy of the GNU Affero General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
+    ADDITIONAL TERMS (Pursuant to GNU AGPLv3 Section 7):
+    1. [Section 7(b)] Preservation of Notices: All copies, derivatives, and works containing
+       this material must preserve in their entirety the original copyright notices, this
+       license notice, the Terms of Use (TERMS_OF_USE.md), and the mandatory user clickwrap
+       acceptance screen / interactive disclaimer.
+    2. [Section 7(c)] Non-Misrepresentation: Modified versions must be prominently marked
+       as modified and must not be represented as the original Openbonch software.
+    3. [Section 7(e)] Trademark & Endorsement: No trademark or publicity rights are granted
+       for the names "Openbonch", "Dantiox", "SPbSUT", "Бонч", or contributor names.
+    4. [Section 13] Network Server Copyleft: Any remote network interaction (APIs, SaaS, bots,
+       web interfaces, proxies) is strictly governed by Section 13, requiring immediate,
+       free, and prominent access to the complete Corresponding Source code.
+
 Also add information on how to contact you by electronic and paper mail.
 
   If your software can interact with users remotely through a computer
