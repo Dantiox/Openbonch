@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 authors = ["Dantiox"]
 description = "Core portable FOSS engine for SPbSUT (Bonch) student services"
-license = "MIT"
+license = "AGPL-3.0-or-later"
 
 [dependencies]
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "cookies", "json"] }
