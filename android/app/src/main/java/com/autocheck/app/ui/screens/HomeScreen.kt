@@ -83,6 +83,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.autocheck.app.data.AutoClickState
 import com.autocheck.app.data.EngineStatus
+import com.autocheck.app.data.GroupScheduleProvider
 import com.autocheck.app.data.LogEntry
 import com.autocheck.app.data.LogLevel
 import com.autocheck.app.data.Stats
