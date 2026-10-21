@@ -26,7 +26,7 @@ object NotificationPresenter {
         val connecting = status == EngineStatus.CONNECTING
         val event = latestEvent(logs, prefs, baselineId)
 
-        val title = if (connecting) "AutoCheck подключается" else "AutoCheck работает"
+        val title = if (connecting) "Openbonch подключается" else "Openbonch работает"
         val text = when {
             event != null -> "${event.time} · ${event.message}"
             connecting -> "Выполняется вход в личный кабинет"
@@ -40,11 +40,11 @@ object NotificationPresenter {
         if (status == EngineStatus.ERROR) {
             val reason = logs.lastOrNull { it.category == LogCategory.ERROR }?.message
             return NotificationContent(
-                "AutoCheck остановлен из-за ошибки",
+                "Openbonch остановлен из-за ошибки",
                 reason ?: "Подробности смотрите в журнале",
             )
         }
-        return NotificationContent("AutoCheck остановлен", "Проверка расписания не выполняется")
+        return NotificationContent("Openbonch остановлен", "Проверка расписания не выполняется")
     }
 
     /**

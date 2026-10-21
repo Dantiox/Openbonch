@@ -55,7 +55,7 @@ class AutoClickService : Service() {
     private val postedAt = System.currentTimeMillis()
 
     @Volatile
-    private var currentContent = NotificationContent("AutoCheck подключается", "Выполняется вход в личный кабинет")
+    private var currentContent = NotificationContent("Openbonch подключается", "Выполняется вход в личный кабинет")
 
     private val notificationManager: NotificationManager
         get() = getSystemService(NotificationManager::class.java)

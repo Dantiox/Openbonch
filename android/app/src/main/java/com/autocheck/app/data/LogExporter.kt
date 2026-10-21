@@ -49,7 +49,7 @@ object LogExporter {
 
     /** Текст `.log`: записи в хронологическом порядке (старые сверху), по одной на строку. */
     fun formatLog(entries: List<LogEntry>): String = buildString {
-        append("AutoCheck — журнал\n")
+        append("Openbonch — журнал\n")
         append("Сформирован: ").append(LocalDateTime.now().format(lineFormat)).append('\n')
         append("Записей: ").append(entries.size).append("\n\n")
         entries.forEach { e ->

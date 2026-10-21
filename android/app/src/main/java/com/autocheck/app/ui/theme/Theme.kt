@@ -163,7 +163,7 @@ private fun IosColors.toMaterial() =
     )
 
 @Composable
-fun AutoCheckTheme(darkTheme: Boolean, content: @Composable () -> Unit) {
+fun OpenbonchTheme(darkTheme: Boolean, content: @Composable () -> Unit) {
     val colors = if (darkTheme) DarkIos else LightIos
     CompositionLocalProvider(
         LocalIosColors provides colors,
@@ -176,6 +176,9 @@ fun AutoCheckTheme(darkTheme: Boolean, content: @Composable () -> Unit) {
         )
     }
 }
+
+@Composable
+fun AutoCheckTheme(darkTheme: Boolean, content: @Composable () -> Unit) = OpenbonchTheme(darkTheme, content)
 
 /** Цвет точки уровня лога: голубой — инфо, зелёный — успех, оранжевый — предупреждение, красный — ошибка. */
 @Composable

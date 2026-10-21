@@ -148,7 +148,7 @@ fun HomeScreen(
             .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = bottomInset),
         verticalArrangement = Arrangement.spacedBy(20.dp),
     ) {
-        LargeTitle("AutoCheck")
+        LargeTitle("Openbonch")
 
         Hero(
             status = status,

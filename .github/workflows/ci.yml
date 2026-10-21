@@ -74,3 +74,20 @@ jobs:
         with:
           name: openbonch-macos-universal
           path: dist/openbonch-macos-universal
+
+  # Сборка Windows (x86_64-pc-windows-msvc)
+  build-windows:
+    name: Build Windows x86_64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+      - name: Build Windows
+        run: cargo build --target x86_64-pc-windows-msvc --release
+      - name: Upload Windows Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: openbonch-windows-x86_64
+          path: target/x86_64-pc-windows-msvc/release/openbonch.exe

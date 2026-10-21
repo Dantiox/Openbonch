@@ -722,7 +722,7 @@ private fun BackgroundPage(vm: MainViewModel, ignoringBattery: Boolean, onBack: 
             }
             GroupFooter(
                 "Android может ограничивать работу приложений при выключенном экране. " +
-                    "Исключите AutoCheck из оптимизации батареи, чтобы проверки не прерывались."
+                    "Исключите Openbonch из оптимизации батареи, чтобы проверки не прерывались."
             )
         }
 
@@ -731,7 +731,7 @@ private fun BackgroundPage(vm: MainViewModel, ignoringBattery: Boolean, onBack: 
             GroupedCard {
                 SwitchRow(
                     title = "Запускать после перезагрузки",
-                    description = "После включения или перезагрузки телефона AutoCheck сам начнёт проверку, " +
+                    description = "После включения или перезагрузки телефона Openbonch сам начнёт проверку, " +
                         "открывать приложение не нужно.",
                     checked = vm.autoStart,
                     onCheckedChange = vm::updateAutoStart,
@@ -750,7 +750,7 @@ private fun BackgroundPage(vm: MainViewModel, ignoringBattery: Boolean, onBack: 
                 "Работает, если добавлен хотя бы один аккаунт. " +
                     if (AutoStartSettings.isVendorRestricted()) {
                         "Ваша прошивка может блокировать автозапуск: откройте настройки выше и разрешите " +
-                            "AutoCheck запускаться автоматически (на Samsung — не отправляйте приложение в «спящие»)."
+                            "Openbonch запускаться автоматически (на Samsung — не отправляйте приложение в «спящие»)."
                     } else {
                         "Дополнительных разрешений на этом устройстве, как правило, не нужно."
                     }

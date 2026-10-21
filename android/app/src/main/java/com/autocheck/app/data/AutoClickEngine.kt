@@ -186,7 +186,7 @@ class AutoClickEngine(private val newClient: () -> SutClient) {
         val message = e.message.orEmpty()
         return if (e is SocketException && message.contains("EPERM")) {
             "VPN не разрешает приложению использовать выбранную сеть (EPERM). " +
-                "Добавьте AutoCheck в исключения VPN или выберите маршрут «Как в системе»"
+                "Добавьте Openbonch в исключения VPN или выберите маршрут «Как в системе»"
         } else {
             val type = e.javaClass.simpleName
             if (message.isBlank()) type else "$type: $message"

@@ -10,7 +10,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.autocheck.app.ui.AppRoot
 import com.autocheck.app.ui.MainViewModel
-import com.autocheck.app.ui.theme.AutoCheckTheme
+import com.autocheck.app.ui.theme.OpenbonchTheme
 import com.autocheck.app.ui.theme.isDark
 
 class MainActivity : ComponentActivity() {
@@ -32,7 +32,7 @@ class MainActivity : ComponentActivity() {
                 onDispose { }
             }
 
-            AutoCheckTheme(darkTheme = dark) {
+            OpenbonchTheme(darkTheme = dark) {
                 AppRoot(vm)
             }
         }
