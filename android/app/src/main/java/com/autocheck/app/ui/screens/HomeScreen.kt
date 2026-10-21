@@ -823,33 +823,62 @@ private fun StatItem(label: String, value: String, accent: Boolean = false) {
 }
 
 @Composable
-fun LogRow(entry: LogEntry) {
+fun LogRow(
+    entry: LogEntry,
+    modifier: Modifier = Modifier,
+    onOpenResponse: ((LogEntry) -> Unit)? = null,
+) {
+    val c = Ios.colors
+    val openable = onOpenResponse != null && entry.responseFile != null
+    val interaction = remember { MutableInteractionSource() }
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .then(
+                if (openable) {
+                    Modifier
+                        .pressHighlight(interaction)
+                        .clickable(
+                            interactionSource = interaction,
+                            indication = null,
+                            role = Role.Button,
+                            onClickLabel = "Открыть ответ сервера",
+                            onClick = { onOpenResponse?.invoke(entry) },
+                        )
+                } else {
+                    Modifier
+                }
+            )
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(
             Modifier
-                .size(8.dp)
-                .clip(CircleShape)
-                .background(entry.level.color()),
+                .padding(top = 7.dp)
+                .size(10.dp)
+                .background(if (entry.responseFile != null) Brand.Amber else entry.level.color(), CircleShape)
         )
-        Spacer(Modifier.width(12.dp))
-        Text(
-            text = entry.message,
-            style = MaterialTheme.typography.bodySmall,
-            color = Ios.colors.label,
-            modifier = Modifier.weight(1f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
-        Spacer(Modifier.width(8.dp))
-        Text(
-            text = entry.displayTime(),
-            style = MonoStyle,
-            color = Ios.colors.tertiaryLabel,
-        )
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text(
+                entry.message,
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (entry.level == LogLevel.ERROR) c.danger else c.label,
+                fontWeight = when (entry.level) {
+                    LogLevel.SUCCESS, LogLevel.ERROR -> FontWeight.Medium
+                    else -> null
+                },
+            )
+            Text(entry.displayTime(), style = MonoStyle, color = c.secondaryLabel)
+        }
+        if (openable) {
+            Row(Modifier.padding(top = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text("HTML", style = MaterialTheme.typography.labelMedium, color = c.accentText)
+                Icon(
+                    Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = c.tertiaryLabel,
+                )
+            }
+        }
     }
 }
