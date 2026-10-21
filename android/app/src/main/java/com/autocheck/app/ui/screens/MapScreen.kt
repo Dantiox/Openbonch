@@ -4,9 +4,6 @@ import android.content.Context
 import android.graphics.Paint
 import android.graphics.Typeface
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -38,6 +35,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Bolt
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.CropFree
 import androidx.compose.material.icons.rounded.Elevator
@@ -50,6 +48,7 @@ import androidx.compose.material.icons.rounded.Remove
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Stairs
+import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.material.icons.rounded.Wc
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -88,10 +87,13 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.PathParser
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.autocheck.app.data.AutoClickState
 import org.json.JSONObject
+import kotlin.math.sqrt
 
 // ─────────────────────────────────────────────────────────────
-// Данные схемы этажа, аудиторий и объектов инфраструктуры
+// Модели данных схемы этажа, аудиторий и объектов инфраструктуры
 // ─────────────────────────────────────────────────────────────
 
 data class RoomShape(
@@ -307,8 +309,12 @@ private fun loadFloors(context: Context): Map<Int, FloorMapData> {
     return result
 }
 
+// Координаты главного входа университета на 1 этаже
+private val MAIN_ENTRANCE_POINT = Offset(1080f, 180f)
+private const val MAIN_ENTRANCE_NAME = "Главный вход"
+
 // ─────────────────────────────────────────────────────────────
-// Главный экран Навигатора кампуса (Темы, Вращение, Инфраструктура)
+// Главный экран Навигатора кампуса (Полноценная навигация)
 // ─────────────────────────────────────────────────────────────
 
 @Composable
@@ -318,6 +324,7 @@ fun MapScreen(
 ) {
     val context = LocalContext.current
     val allFloors = remember { loadFloors(context) }
+    val scheduleData by AutoClickState.schedule.collectAsStateWithLifecycle()
 
     var currentTheme by remember { mutableStateOf(MapTheme.TACTICAL) }
     var showThemeMenu by remember { mutableStateOf(false) }
@@ -330,10 +337,16 @@ fun MapScreen(
     var selectedRoom by remember { mutableStateOf<RoomShape?>(null) }
     var selectedAmenity by remember { mutableStateOf<Amenity?>(null) }
 
+    // Точки маршрута: Откуда и Куда (По умолчанию: Откуда = Главный вход 1 этажа)
+    var originFloor by remember { mutableIntStateOf(1) }
     var originRoom by remember { mutableStateOf<RoomShape?>(null) }
     var originAmenity by remember { mutableStateOf<Amenity?>(null) }
+    var isOriginDefaultEntrance by remember { mutableStateOf(true) }
+
+    var destFloor by remember { mutableIntStateOf(1) }
     var destRoom by remember { mutableStateOf<RoomShape?>(null) }
     var destAmenity by remember { mutableStateOf<Amenity?>(null) }
+
     var isSelectingOrigin by remember { mutableStateOf(false) }
 
     // Масштаб, панорамирование и угол вращения карты
@@ -388,7 +401,7 @@ fun MapScreen(
         offsetY = -amenity.y * scale + 800f
     }
 
-    // Инвертирование координат экрана в локальную систему координат карты (с учетом вращения и масштаба)
+    // Инвертирование экранных координат тача в локальные координаты карты с учетом вращения
     fun screenToLocal(tapX: Float, tapY: Float, viewW: Float, viewH: Float): Offset {
         val pivotX = viewW / 2f
         val pivotY = viewH / 2f
@@ -404,7 +417,68 @@ fun MapScreen(
         return Offset(localX, localY)
     }
 
-    // Обработка внешнего перехода из расписания
+    // Установка маршрута между парами из расписания ("из прошлой аудитории в следующую")
+    fun routeBetweenClasses() {
+        val days = scheduleData?.days ?: emptyList()
+        val allLessons = days.flatMap { it.lessons }.filter { it.auditorium.isNotBlank() }
+
+        val (firstAud, secondAud) = if (allLessons.size >= 2) {
+            allLessons[0].auditorium to allLessons[1].auditorium
+        } else if (allLessons.size == 1) {
+            "Главный вход" to allLessons[0].auditorium
+        } else {
+            // Демо-пары из скриншота расписания (521/2 и 501/1)
+            "521/2" to "501/1"
+        }
+
+        // Поиск аудитории отправления
+        if (firstAud == "Главный вход") {
+            isOriginDefaultEntrance = true
+            originRoom = null
+            originAmenity = null
+            originFloor = 1
+        } else {
+            for (f in 1..7) {
+                val match = allFloors[f]?.rooms?.firstOrNull { 
+                    it.name.contains(firstAud, ignoreCase = true) || it.id.contains(firstAud, ignoreCase = true) 
+                }
+                if (match != null) {
+                    originRoom = match
+                    originAmenity = null
+                    originFloor = f
+                    isOriginDefaultEntrance = false
+                    break
+                }
+            }
+        }
+
+        // Поиск аудитории назначения
+        for (f in 1..7) {
+            val match = allFloors[f]?.rooms?.firstOrNull { 
+                it.name.contains(secondAud, ignoreCase = true) || it.id.contains(secondAud, ignoreCase = true) 
+            }
+            if (match != null) {
+                destRoom = match
+                destAmenity = null
+                destFloor = f
+                selectedRoom = match
+                selectedFloor = originFloor
+                break
+            }
+        }
+    }
+
+    // Поиск ближайшей лестницы/лифта на этаже для межэтажного маршрута
+    fun findClosestStair(floor: Int, targetPoint: Offset): Amenity? {
+        val stairs = allFloors[floor]?.amenities?.filter { it.type == "stairs" || it.type == "elevator" }
+        return stairs?.minByOrNull {
+            val dx = it.x - targetPoint.x
+            val dy = it.y - targetPoint.y
+            dx * dx + dy * dy
+        }
+    }
+
+    // Внешний переход из расписания
     LaunchedEffect(highlightRoom) {
         if (!highlightRoom.isNullOrBlank()) {
             searchQuery = highlightRoom
@@ -415,10 +489,11 @@ fun MapScreen(
                 }
                 if (match != null) {
                     selectedFloor = f
-                    selectedRoom = match
-                    selectedAmenity = null
+                    destFloor = f
                     destRoom = match
                     destAmenity = null
+                    selectedRoom = match
+                    selectedAmenity = null
                     centerOnRoom(match)
                     break
                 }
@@ -499,7 +574,7 @@ fun MapScreen(
                         val tappedAmenity = currentFloorData?.amenities?.firstOrNull { a ->
                             val dx = localX - a.x
                             val dy = localY - a.y
-                            (dx * dx + dy * dy) <= 26f * 26f
+                            (dx * dx + dy * dy) <= 28f * 28f
                         }
 
                         if (tappedAmenity != null) {
@@ -508,10 +583,13 @@ fun MapScreen(
                             if (isSelectingOrigin) {
                                 originAmenity = tappedAmenity
                                 originRoom = null
+                                originFloor = selectedFloor
+                                isOriginDefaultEntrance = false
                                 isSelectingOrigin = false
                             } else {
                                 destAmenity = tappedAmenity
                                 destRoom = null
+                                destFloor = selectedFloor
                             }
                             return@detectTapGestures
                         }
@@ -527,11 +605,14 @@ fun MapScreen(
                             if (isSelectingOrigin) {
                                 originRoom = tappedRoom
                                 originAmenity = null
+                                originFloor = selectedFloor
+                                isOriginDefaultEntrance = false
                                 isSelectingOrigin = false
                             } else {
                                 selectedRoom = tappedRoom
                                 destRoom = tappedRoom
                                 destAmenity = null
+                                destFloor = selectedFloor
                                 searchQuery = tappedRoom.name
                             }
                         }
@@ -562,22 +643,27 @@ fun MapScreen(
                         drawPath(court, color = currentTheme.courtyardStroke, style = Stroke(width = 1.5f))
                     }
 
-                    // 3. Стрелочка главного входа
+                    // 3. Стрелочка главного входа (с компенсацией поворота)
                     if (selectedFloor == 1) {
-                        val arrowX = 1080f
-                        val arrowY = 150f
+                        val arrowX = MAIN_ENTRANCE_POINT.x
+                        val arrowY = MAIN_ENTRANCE_POINT.y
+                        drawContext.canvas.nativeCanvas.save()
+                        drawContext.canvas.nativeCanvas.rotate(-rotationAngle, arrowX, arrowY)
                         val arrowPath = Path().apply {
-                            moveTo(arrowX, arrowY)
-                            lineTo(arrowX - 16f, arrowY - 24f)
-                            lineTo(arrowX + 16f, arrowY - 24f)
+                            moveTo(arrowX, arrowY + 10f)
+                            lineTo(arrowX - 16f, arrowY - 20f)
+                            lineTo(arrowX + 16f, arrowY - 20f)
                             close()
                         }
                         drawPath(arrowPath, color = Color(0xFFFF6D00))
+                        drawContext.canvas.nativeCanvas.drawText("ВХОД", arrowX, arrowY - 26f, textPaint)
+                        drawContext.canvas.nativeCanvas.restore()
                     }
 
                     // 4. Отрисовка аудиторий с семантическими цветами
                     for (room in currentFloorData.rooms) {
                         val isSelected = selectedRoom?.id == room.id || 
+                                        destRoom?.id == room.id ||
                                         (searchQuery.isNotBlank() && room.name.equals(searchQuery, ignoreCase = true))
 
                         val fillColor = when {
@@ -626,15 +712,18 @@ fun MapScreen(
                             drawPath(polyPath, color = strokeColor, style = Stroke(width = if (isSelected) 3.5f else 1.2f))
                         }
 
-                        // Номер аудитории внутри плашки
+                        // Номер аудитории с КОМПЕНСАЦИЕЙ ПОВОРОТА (всегда горизонтален для глаз)
                         if (scale >= 0.65f && room.name.isNotEmpty()) {
                             val cx = room.x + room.w / 2f
-                            val cy = room.y + room.h / 2f + 4.5f
-                            drawContext.canvas.nativeCanvas.drawText(room.name, cx, cy, textPaint)
+                            val cy = room.y + room.h / 2f
+                            drawContext.canvas.nativeCanvas.save()
+                            drawContext.canvas.nativeCanvas.rotate(-rotationAngle, cx, cy)
+                            drawContext.canvas.nativeCanvas.drawText(room.name, cx, cy + 4.5f, textPaint)
+                            drawContext.canvas.nativeCanvas.restore()
                         }
                     }
 
-                    // 5. Отрисовка объектов инфраструктуры (Лестницы, Туалеты, Лифты)
+                    // 5. Отрисовка объектов инфраструктуры с КОМПЕНСАЦИЕЙ ПОВОРОТА
                     val filteredAmenities = currentFloorData.amenities.filter { a ->
                         when (selectedAmenityFilter) {
                             AmenityFilter.ALL -> true
@@ -645,12 +734,15 @@ fun MapScreen(
                     }
 
                     for (amenity in filteredAmenities) {
-                        val isAmenitySelected = selectedAmenity?.id == amenity.id
+                        val isAmenitySelected = selectedAmenity?.id == amenity.id || destAmenity?.id == amenity.id
                         val badgeRadius = if (isAmenitySelected) 18f else 14f
+
+                        // Компенсируем вращение холста: иконка всегда ориентирована прямо
+                        drawContext.canvas.nativeCanvas.save()
+                        drawContext.canvas.nativeCanvas.rotate(-rotationAngle, amenity.x, amenity.y)
 
                         when (amenity.type) {
                             "elevator" -> {
-                                // Лифт: фиолетовый круг с иконкой кабины
                                 drawCircle(
                                     color = Color(0xFF673AB7),
                                     radius = badgeRadius,
@@ -662,7 +754,6 @@ fun MapScreen(
                                     center = Offset(amenity.x, amenity.y),
                                     style = Stroke(width = if (isAmenitySelected) 3.5f else 1.8f)
                                 )
-                                // Кабина лифта
                                 drawRoundRect(
                                     color = Color.White,
                                     topLeft = Offset(amenity.x - 6f, amenity.y - 7f),
@@ -674,7 +765,6 @@ fun MapScreen(
                                 drawCircle(color = Color.White, radius = 1.8f, center = Offset(amenity.x, amenity.y + 2.5f))
                             }
                             "stairs" -> {
-                                // Лестница: изумрудный круг с графическими ступеньками
                                 drawCircle(
                                     color = Color(0xFF00897B),
                                     radius = badgeRadius,
@@ -686,7 +776,6 @@ fun MapScreen(
                                     center = Offset(amenity.x, amenity.y),
                                     style = Stroke(width = if (isAmenitySelected) 3.5f else 1.8f)
                                 )
-                                // Ступени лестницы
                                 val stairPath = Path().apply {
                                     moveTo(amenity.x - 6f, amenity.y + 6f)
                                     lineTo(amenity.x - 6f, amenity.y + 1f)
@@ -698,7 +787,6 @@ fun MapScreen(
                                 drawPath(stairPath, color = Color.White, style = Stroke(width = 2.2f, cap = StrokeCap.Round))
                             }
                             "wc_woman" -> {
-                                // Женский туалет: розовая плашка
                                 drawCircle(
                                     color = Color(0xFFD81B60),
                                     radius = badgeRadius,
@@ -713,7 +801,6 @@ fun MapScreen(
                                 drawContext.canvas.nativeCanvas.drawText("Ж", amenity.x, amenity.y + 4f, amenityTextPaint)
                             }
                             "wc_man" -> {
-                                // Мужской туалет: синяя плашка
                                 drawCircle(
                                     color = Color(0xFF1976D2),
                                     radius = badgeRadius,
@@ -728,7 +815,6 @@ fun MapScreen(
                                 drawContext.canvas.nativeCanvas.drawText("М", amenity.x, amenity.y + 4f, amenityTextPaint)
                             }
                             "wc_accessible" -> {
-                                // Туалет для МГН: бирюзовая плашка
                                 drawCircle(
                                     color = Color(0xFF00ACC1),
                                     radius = badgeRadius,
@@ -743,7 +829,6 @@ fun MapScreen(
                                 drawContext.canvas.nativeCanvas.drawText("♿", amenity.x, amenity.y + 4f, amenityTextPaint)
                             }
                             else -> {
-                                // Общий санузел
                                 drawCircle(
                                     color = Color(0xFF5E35B1),
                                     radius = badgeRadius,
@@ -758,23 +843,71 @@ fun MapScreen(
                                 drawContext.canvas.nativeCanvas.drawText("WC", amenity.x, amenity.y + 4f, amenityTextPaint)
                             }
                         }
+                        drawContext.canvas.nativeCanvas.restore()
                     }
 
-                    // 6. Отрисовка маршрута (между аудиториями и объектами инфраструктуры)
-                    val startX = originRoom?.let { it.x + it.w / 2f } ?: originAmenity?.x
-                    val startY = originRoom?.let { it.y + it.h / 2f } ?: originAmenity?.y
-                    val endX = destRoom?.let { it.x + it.w / 2f } ?: destAmenity?.x
-                    val endY = destRoom?.let { it.y + it.h / 2f } ?: destAmenity?.y
+                    // 6. Отрисовка маршрута навигатора (Одноэтажный и многоэтажный)
+                    val originPoint = if (isOriginDefaultEntrance) {
+                        MAIN_ENTRANCE_POINT
+                    } else {
+                        originRoom?.let { Offset(it.x + it.w / 2f, it.y + it.h / 2f) } 
+                            ?: originAmenity?.let { Offset(it.x, it.y) }
+                    }
 
-                    if (startX != null && startY != null && endX != null && endY != null) {
-                        drawLine(
-                            color = Color(0xFFFF6D00),
-                            start = Offset(startX, startY),
-                            end = Offset(endX, endY),
-                            strokeWidth = 5f
-                        )
-                        drawCircle(color = Color(0xFF00E676), radius = 8f, center = Offset(startX, startY))
-                        drawCircle(color = Color(0xFFFF6D00), radius = 8f, center = Offset(endX, endY))
+                    val destPoint = destRoom?.let { Offset(it.x + it.w / 2f, it.y + it.h / 2f) }
+                        ?: destAmenity?.let { Offset(it.x, it.y) }
+
+                    if (originPoint != null && destPoint != null) {
+                        if (originFloor == destFloor) {
+                            // Одноэтажный маршрут
+                            if (selectedFloor == originFloor) {
+                                drawLine(
+                                    color = Color(0xFFFF6D00),
+                                    start = originPoint,
+                                    end = destPoint,
+                                    strokeWidth = 6f,
+                                    cap = StrokeCap.Round
+                                )
+                                drawCircle(color = Color(0xFF00E676), radius = 9f, center = originPoint)
+                                drawCircle(color = Color(0xFFFF6D00), radius = 9f, center = destPoint)
+                            }
+                        } else {
+                            // Многоэтажный маршрут через лестницу/лифт
+                            val stairOrigin = findClosestStair(originFloor, originPoint)
+                            val stairDest = stairOrigin?.let { so ->
+                                allFloors[destFloor]?.amenities?.minByOrNull { 
+                                    val dx = it.x - so.x
+                                    val dy = it.y - so.y
+                                    dx * dx + dy * dy
+                                }
+                            }
+
+                            if (selectedFloor == originFloor && stairOrigin != null) {
+                                // Отрезок маршрута на этаже отправления: от старта до лестницы
+                                val stairPoint = Offset(stairOrigin.x, stairOrigin.y)
+                                drawLine(
+                                    color = Color(0xFFFF6D00),
+                                    start = originPoint,
+                                    end = stairPoint,
+                                    strokeWidth = 6f,
+                                    cap = StrokeCap.Round
+                                )
+                                drawCircle(color = Color(0xFF00E676), radius = 9f, center = originPoint)
+                                drawCircle(color = Color(0xFFFF9800), radius = 10f, center = stairPoint)
+                            } else if (selectedFloor == destFloor && stairDest != null) {
+                                // Отрезок маршрута на этаже назначения: от лестницы до цели
+                                val stairPoint = Offset(stairDest.x, stairDest.y)
+                                drawLine(
+                                    color = Color(0xFFFF6D00),
+                                    start = stairPoint,
+                                    end = destPoint,
+                                    strokeWidth = 6f,
+                                    cap = StrokeCap.Round
+                                )
+                                drawCircle(color = Color(0xFFFF9800), radius = 10f, center = stairPoint)
+                                drawCircle(color = Color(0xFFFF6D00), radius = 9f, center = destPoint)
+                            }
+                        }
                     }
                 }
             }
@@ -1012,7 +1145,7 @@ fun MapScreen(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp, bottom = bottomPadding + 260.dp)
+                    .padding(start = 16.dp, end = 16.dp, bottom = bottomPadding + 280.dp)
                     .heightIn(max = 240.dp),
                 shape = RoundedCornerShape(18.dp),
                 colors = CardDefaults.cardColors(containerColor = currentTheme.surfaceColor),
@@ -1030,6 +1163,7 @@ fun MapScreen(
                                         selectedAmenity = null
                                         destRoom = room
                                         destAmenity = null
+                                        destFloor = floor
                                         searchQuery = room.name
                                         centerOnRoom(room)
                                     } else if (amenity != null) {
@@ -1037,6 +1171,7 @@ fun MapScreen(
                                         selectedRoom = null
                                         destAmenity = amenity
                                         destRoom = null
+                                        destFloor = floor
                                         searchQuery = amenity.name
                                         centerOnAmenity(amenity)
                                     }
@@ -1100,22 +1235,29 @@ fun MapScreen(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Статус расписания
+                // Кнопка быстрого маршрута: "⚡ Из прошлой аудитории в следующую"
                 Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFFFF6D00).copy(alpha = 0.15f))
+                        .border(1.dp, Color(0xFFFF6D00).copy(alpha = 0.4f), RoundedCornerShape(12.dp))
+                        .clickable { routeBetweenClasses() }
+                        .padding(horizontal = 14.dp, vertical = 9.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        Icons.Rounded.Schedule,
+                        Icons.Rounded.Bolt,
                         contentDescription = null,
-                        tint = Color(0xFFFF9800),
-                        modifier = Modifier.size(16.dp)
+                        tint = Color(0xFFFF6D00),
+                        modifier = Modifier.size(18.dp)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Пары на сегодня закончились",
+                        text = "Из прошлой аудитории в следующую",
+                        color = Color(0xFFFF9800),
                         fontSize = 13.sp,
-                        color = currentTheme.textSecondary,
-                        fontWeight = FontWeight.Medium
+                        fontWeight = FontWeight.SemiBold
                     )
                 }
 
@@ -1235,12 +1377,20 @@ fun MapScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Кнопки маршрутизатора: "Откуда" / "Куда"
+                // Кнопки маршрутизатора: "Откуда" / [⇆] / "Куда"
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     // Откуда
+                    val originLabel = when {
+                        isOriginDefaultEntrance -> "Вход (1 эт.)"
+                        originRoom != null -> "Ауд. ${originRoom?.name}"
+                        originAmenity != null -> originAmenity?.name ?: "Откуда"
+                        else -> "Вход (1 эт.)"
+                    }
+
                     Box(
                         modifier = Modifier
                             .weight(1f)
@@ -1252,7 +1402,7 @@ fun MapScreen(
                                 RoundedCornerShape(14.dp)
                             )
                             .clickable { isSelectingOrigin = true }
-                            .padding(vertical = 12.dp, horizontal = 16.dp)
+                            .padding(vertical = 12.dp, horizontal = 12.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
@@ -1261,24 +1411,65 @@ fun MapScreen(
                                     .clip(CircleShape)
                                     .background(Color(0xFF00E676))
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = originRoom?.let { "Ауд. ${it.name}" } ?: originAmenity?.name ?: "Откуда",
-                                color = if (originRoom != null || originAmenity != null) currentTheme.textPrimary else currentTheme.textSecondary,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium
+                                text = originLabel,
+                                color = currentTheme.textPrimary,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1
                             )
                         }
                     }
 
+                    // Кнопка быстрой смены направления местами (Swap)
+                    IconButton(
+                        onClick = {
+                            val tempRoom = originRoom
+                            val tempAmenity = originAmenity
+                            val tempFloor = originFloor
+                            val tempEntrance = isOriginDefaultEntrance
+
+                            originRoom = destRoom
+                            originAmenity = destAmenity
+                            originFloor = destFloor
+                            isOriginDefaultEntrance = false
+
+                            destRoom = tempRoom
+                            destAmenity = tempAmenity
+                            destFloor = tempFloor
+                            if (tempEntrance) {
+                                destFloor = 1
+                            }
+                            selectedFloor = originFloor
+                        },
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(currentTheme.defaultRoomFill)
+                    ) {
+                        Icon(
+                            Icons.Rounded.SwapVert,
+                            contentDescription = "Поменять местами",
+                            tint = currentTheme.textSecondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
                     // Куда
+                    val destLabel = when {
+                        destRoom != null -> "Ауд. ${destRoom?.name}"
+                        destAmenity != null -> destAmenity?.name ?: "Куда"
+                        else -> "Куда"
+                    }
+
                     Box(
                         modifier = Modifier
                             .weight(1f)
                             .clip(RoundedCornerShape(14.dp))
                             .background(currentTheme.defaultRoomFill)
                             .clickable { }
-                            .padding(vertical = 12.dp, horizontal = 16.dp)
+                            .padding(vertical = 12.dp, horizontal = 12.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Box(
@@ -1287,13 +1478,74 @@ fun MapScreen(
                                     .clip(CircleShape)
                                     .background(Color(0xFFFF6D00))
                             )
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = destRoom?.let { "Ауд. ${it.name}" } ?: destAmenity?.name ?: "Куда",
+                                text = destLabel,
                                 color = if (destRoom != null || destAmenity != null) currentTheme.textPrimary else currentTheme.textSecondary,
-                                fontSize = 14.sp,
-                                fontWeight = FontWeight.Medium
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 1
                             )
+                        }
+                    }
+                }
+
+                // Многоэтажный пошаговый навигатор (если начало и конец на разных этажах)
+                if (destRoom != null || destAmenity != null) {
+                    if (originFloor != destFloor) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Шаг 1: Этаж отправления
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(if (selectedFloor == originFloor) Color(0xFFFF6D00) else currentTheme.defaultRoomFill)
+                                    .clickable { selectedFloor = originFloor }
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = "1. Этаж $originFloor: До лестницы",
+                                    color = if (selectedFloor == originFloor) Color.White else currentTheme.textSecondary,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
+
+                            // Шаг 2: Переход между этажами
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(currentTheme.defaultRoomFill)
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = if (originFloor < destFloor) "▲ Поднимитесь на $destFloor эт." else "▼ Спуститесь на $destFloor эт.",
+                                    color = Color(0xFFFF9800),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+
+                            // Шаг 3: Этаж назначения
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(if (selectedFloor == destFloor) Color(0xFFFF6D00) else currentTheme.defaultRoomFill)
+                                    .clickable { selectedFloor = destFloor }
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = "2. Этаж $destFloor: До цели",
+                                    color = if (selectedFloor == destFloor) Color.White else currentTheme.textSecondary,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                            }
                         }
                     }
                 }
@@ -1360,7 +1612,7 @@ fun MapScreen(
                     }
                 }
 
-                // Карточка деталей выбранного объекта инфраструктуры (Лифт / Лестница / Туалет)
+                // Карточка деталей выбранного объекта инфраструктуры
                 AnimatedVisibility(
                     visible = selectedAmenity != null,
                     enter = slideInVertically { it / 2 } + fadeIn(),

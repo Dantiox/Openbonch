@@ -182,6 +182,10 @@ fun AppRoot(vm: MainViewModel) {
                         onToggle = onToggle,
                         onOpenLog = { tab = Tab.Log },
                         onOpenSettings = { tab = Tab.Settings },
+                        onNavigateToMap = { room ->
+                            mapHighlightRoom = room
+                            tab = Tab.Map
+                        },
                     )
 
                     Tab.Map -> MapScreen(

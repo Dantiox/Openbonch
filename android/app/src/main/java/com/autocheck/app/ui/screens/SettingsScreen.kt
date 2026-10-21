@@ -32,6 +32,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
@@ -663,8 +664,9 @@ private fun AppearancePage(vm: MainViewModel, onBack: () -> Unit) {
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 16.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
+                        .horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 12.dp, vertical = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                 ) {
                     ThemeMode.entries.forEach { option ->
                         ThemeSwatch(
@@ -1101,11 +1103,16 @@ private fun ThemeSwatch(mode: ThemeMode, selected: Boolean, onClick: () -> Unit)
                 .clip(shape)
                 .drawBehind {
                     when (mode) {
-                        ThemeMode.LIGHT -> drawMiniScreen(dark = false, from = 0f, to = size.width)
-                        ThemeMode.DARK -> drawMiniScreen(dark = true, from = 0f, to = size.width)
+                        ThemeMode.LIGHT -> drawMiniScreen(bg = Color(0xFFF2F2F7), card = Color(0xFFFFFFFF), line = Color(0xFFE5E5EA), accent = Brand.Orange, from = 0f, to = size.width)
+                        ThemeMode.DARK -> drawMiniScreen(bg = Color(0xFF000000), card = Color(0xFF1C1C1E), line = Color(0xFF3A3A3C), accent = Brand.Orange, from = 0f, to = size.width)
+                        ThemeMode.OLED -> drawMiniScreen(bg = Color(0xFF000000), card = Color(0xFF0D0D0D), line = Color(0xFF222222), accent = Color(0xFF2DB9FF), from = 0f, to = size.width)
+                        ThemeMode.BONCH_ORANGE -> drawMiniScreen(bg = Color(0xFF0E1015), card = Color(0xFF161A22), line = Color(0xFF262C38), accent = Color(0xFFFF6D00), from = 0f, to = size.width)
+                        ThemeMode.CYBERPUNK -> drawMiniScreen(bg = Color(0xFF050B14), card = Color(0xFF0A192F), line = Color(0xFF1E3A5F), accent = Color(0xFF00E5FF), from = 0f, to = size.width)
+                        ThemeMode.EMERALD -> drawMiniScreen(bg = Color(0xFF06120E), card = Color(0xFF0D221A), line = Color(0xFF1A3D2F), accent = Color(0xFF10B981), from = 0f, to = size.width)
+                        ThemeMode.MIDNIGHT_PURPLE -> drawMiniScreen(bg = Color(0xFF0A0713), card = Color(0xFF150F26), line = Color(0xFF2E1F4D), accent = Color(0xFFA855F7), from = 0f, to = size.width)
                         ThemeMode.SYSTEM -> {
-                            drawMiniScreen(dark = false, from = 0f, to = size.width / 2f)
-                            drawMiniScreen(dark = true, from = size.width / 2f, to = size.width)
+                            drawMiniScreen(bg = Color(0xFFF2F2F7), card = Color(0xFFFFFFFF), line = Color(0xFFE5E5EA), accent = Brand.Orange, from = 0f, to = size.width / 2f)
+                            drawMiniScreen(bg = Color(0xFF000000), card = Color(0xFF1C1C1E), line = Color(0xFF3A3A3C), accent = Brand.Orange, from = size.width / 2f, to = size.width)
                         }
                     }
                 }
@@ -1121,24 +1128,21 @@ private fun ThemeSwatch(mode: ThemeMode, selected: Boolean, onClick: () -> Unit)
     }
 }
 
-/** Рисует упрощённый экран приложения в светлой или тёмной теме в пределах [from]..[to] по горизонтали. */
-private fun DrawScope.drawMiniScreen(dark: Boolean, from: Float, to: Float) {
-    val bg = if (dark) Color(0xFF000000) else Color(0xFFF2F2F7)
-    val card = if (dark) Color(0xFF1C1C1E) else Color(0xFFFFFFFF)
-    val line = if (dark) Color(0xFF3A3A3C) else Color(0xFFE5E5EA)
+/** Рисует упрощённый экран приложения с заданной палитрой в пределах [from]..[to] по горизонтали. */
+private fun DrawScope.drawMiniScreen(bg: Color, card: Color, line: Color, accent: Color, from: Float, to: Float) {
     val w = size.width
     val h = size.height
 
     clipRect(left = from, top = 0f, right = to, bottom = h) {
         drawRect(bg)
-        // Главная карточка — оранжевая
+        // Главная карточка — акцентная
         drawRoundRect(
-            color = Brand.Orange,
+            color = accent,
             topLeft = Offset(w * 0.10f, h * 0.12f),
             size = Size(w * 0.80f, h * 0.30f),
             cornerRadius = CornerRadius(10.dp.toPx()),
         )
-        // Белая/чёрная карточка со строками
+        // Вторичная карточка со строками
         drawRoundRect(
             color = card,
             topLeft = Offset(w * 0.10f, h * 0.48f),
@@ -1157,7 +1161,7 @@ private fun DrawScope.drawMiniScreen(dark: Boolean, from: Float, to: Float) {
             size = Size(w * 0.36f, 4.dp.toPx()),
             cornerRadius = CornerRadius(2.dp.toPx()),
         )
-        // Панель вкладок с голубым акцентом
+        // Панель вкладок с акцентом
         drawRoundRect(
             color = card,
             topLeft = Offset(w * 0.14f, h * 0.84f),
@@ -1165,7 +1169,7 @@ private fun DrawScope.drawMiniScreen(dark: Boolean, from: Float, to: Float) {
             cornerRadius = CornerRadius(h * 0.05f),
         )
         drawRoundRect(
-            color = Brand.Sky,
+            color = accent,
             topLeft = Offset(w * 0.18f, h * 0.855f),
             size = Size(w * 0.22f, h * 0.07f),
             cornerRadius = CornerRadius(h * 0.035f),

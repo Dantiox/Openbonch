@@ -32,7 +32,7 @@ class MainActivity : ComponentActivity() {
                 onDispose { }
             }
 
-            OpenbonchTheme(darkTheme = dark) {
+            OpenbonchTheme(themeMode = vm.themeMode) {
                 AppRoot(vm)
             }
         }
