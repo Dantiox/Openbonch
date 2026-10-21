@@ -213,6 +213,32 @@ fun TermsAgreementDialog(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             lineHeight = 16.sp
                         )
+
+                        Text(
+                            text = "6. Отсутствие имущественного ущерба (ст. 165 УК РФ) и этика нагрузки",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "Openbonch — полностью безвозмездное ПО. Программа не обходит платных услуг/тарифов и не причиняет реального имущественного ущерба или упущенной выгоды (ст. 165 УК РФ). Запросы строго ограничены по частоте (rate limiting) и не создают паразитной нагрузки на серверы. Использование программы для DoS-атак или массового скрейпинга категорически запрещено.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            lineHeight = 16.sp
+                        )
+
+                        Text(
+                            text = "7. Полный запрет телеметрии и трансграничных вызовов",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "В приложении отсутствуют любые библиотеки аналитики или сбора ошибок (Crashlytics, Firebase, Sentry). Сетевой стек изолирован: разрешены исключительно прямые обращения к официальным ресурсам учреждения (*.sut.ru). Любые внешние или зарубежные вызовы блокируются на системном уровне.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            lineHeight = 16.sp
+                        )
                     }
                 }
 
@@ -234,7 +260,7 @@ fun TermsAgreementDialog(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Я прочитал условия лицензии AGPLv3, согласен с полным отказом автора от ответственности и осознаю все риски.",
+                        text = "Я прочитал условия AGPLv3, подтверждаю отсутствие имущественного ущерба (ст. 165 УК РФ) и принимаю полный отказ автора от ответственности.",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurface,
                         lineHeight = 16.sp

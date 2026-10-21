@@ -791,7 +791,37 @@ private fun LegalPage(onBack: () -> Unit) {
                 Box(Modifier.padding(16.dp)) {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
-                            text = "Программа предоставляется «КАК ЕСТЬ» (AS IS). Автор не несёт ответственности за пропуск занятий, несрабатывание автоматической отметки, дисциплинарные меры, блокировку личного кабинета или сбои серверов СПбГУТ. Ответственность несёт пользователь.",
+                            text = "Программа предоставляется «КАК ЕСТЬ» (AS IS). Автор не несёт ответственности за пропуск событий, несрабатывание функций подтверждения статуса, академические взыскания, временное ограничение доступа к личному кабинету или сбои внешних серверов. Все риски возлагаются на пользователя.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Ios.colors.label,
+                        )
+                    }
+                }
+            }
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            GroupHeader("Имущественная безопасность (ст. 165 УК РФ)")
+            GroupedCard {
+                Box(Modifier.padding(16.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "ПО распространяется строго безвозмездно (FOSS) и не преследует корыстных целей. Программа не обходит платных шлюзов/тарифов и не причиняет материального ущерба или упущенной выгоды (ст. 165 УК РФ). Встроенные лимиты частоты опроса исключают нагрузку на инфраструктуру.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Ios.colors.label,
+                        )
+                    }
+                }
+            }
+        }
+
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            GroupHeader("Нулевая телеметрия и суверенитет")
+            GroupedCard {
+                Box(Modifier.padding(16.dp)) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "В приложении полностью отсутствуют трекеры, Crashlytics, Firebase и аналитика. Все сетевые вызовы направляются исключительно на официальные узлы учреждения (*.sut.ru). Внешние и трансграничные соединения заблокированы на системном уровне.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = Ios.colors.label,
                         )

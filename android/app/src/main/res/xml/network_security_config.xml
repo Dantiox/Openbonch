@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Запрет незашифрованного (cleartext HTTP) трафика во всем приложении -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+
+    <!-- Разрешённые защищенные домены: строго официальные ресурсы учреждения -->
+    <domain-config cleartextTrafficPermitted="false">
+        <domain includeSubdomains="true">sut.ru</domain>
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </domain-config>
+</network-security-config>

@@ -6,6 +6,23 @@ use crate::error::{BonchError, Result};
 pub const LK_BASE_URL: &str = "https://lk.sut.ru/cabinet";
 pub const PUBLIC_SCHEDULE_URL: &str = "https://www.sut.ru/studentu/raspisanie";
 
+/// Проверка соответствия хоста официальным доменам учреждения.
+/// Предотвращает любые обращения к недоверенным, внешним или зарубежным ресурсам.
+pub fn validate_host(url_str: &str) -> Result<()> {
+    let url = Url::parse(url_str)
+        .map_err(|e| BonchError::Generic(format!("Некорректный URL: {}", e)))?;
+    if let Some(host) = url.host_str() {
+        if host == "lk.sut.ru" || host == "sut.ru" || host.ends_with(".sut.ru") {
+            return Ok(());
+        }
+        return Err(BonchError::SecurityViolation(format!(
+            "Обращение к внешнему хосту '{}' заблокировано политикой приватности Openbonch",
+            host
+        )));
+    }
+    Err(BonchError::SecurityViolation("Отсутствует хост в адресе".to_string()))
+}
+
 #[derive(Clone)]
 pub struct BonchClient {
     pub(crate) http: Client,

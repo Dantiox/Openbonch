@@ -52,6 +52,18 @@ class SutClient(
     private val http = OkHttpClient.Builder()
         .cookieJar(cookieJar)
         .callTimeout(10, TimeUnit.SECONDS)
+        .addInterceptor { chain ->
+            val host = chain.request().url.host
+            // Строгая изоляция: разрешены исключительно официальные ресурсы образовательного учреждения (*.sut.ru).
+            // Любые внешние, зарубежные или сторонние запросы аппаратно и программно блокируются до отправки в сеть.
+            if (!host.equals("lk.sut.ru", ignoreCase = true) &&
+                !host.endsWith(".sut.ru", ignoreCase = true) &&
+                !host.equals("sut.ru", ignoreCase = true)
+            ) {
+                throw SecurityException("Вызовы к внешним хостам ($host) строго запрещены политикой приватности Openbonch.")
+            }
+            chain.proceed(chain.request())
+        }
         .apply {
             if (route != TrafficRoute.SYSTEM && router != null) {
                 // Сокеты и DNS-запросы привязываются к выбранной физической сети (без использования VPN)

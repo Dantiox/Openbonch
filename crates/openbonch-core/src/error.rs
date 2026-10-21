@@ -14,6 +14,9 @@ pub enum BonchError {
     #[error("Ошибка разбора данных (HTML/JSON): {0}")]
     ParseError(String),
 
+    #[error("Блокировка безопасности: неразрешенный или внешний хост {0}")]
+    SecurityViolation(String),
+
     #[error("Внутренняя ошибка сервиса: {0}")]
     Generic(String),
 }
