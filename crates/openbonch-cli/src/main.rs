@@ -11,7 +11,7 @@ use openbonch_core::{BonchClient, Result};
 #[command(name = "openbonch")]
 #[command(author = "Dantiox")]
 #[command(version = "0.1.0")]
-#[command(about = "100% Free & Open-Source client and auto-checkin daemon for SPbSUT (Bonch) students", long_about = None)]
+#[command(about = "Open-Source client and local workflow automation tool for student services", long_about = None)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
@@ -242,17 +242,17 @@ async fn main() -> anyhow::Result<()> {
 
         Commands::Checkin => {
             let client = get_authenticated_client()?;
-            println!("{}", "Проверка доступных кнопок отметки на парах...".cyan());
+            println!("{}", "Проверка доступных занятий для подтверждения...".cyan());
             let results = client.auto_check_in_current().await?;
 
             if results.is_empty() {
-                println!("{}", "В данный момент активных кнопок «Начать занятие» не обнаружено.".dimmed());
+                println!("{}", "В данный момент активных занятий для подтверждения не обнаружено.".dimmed());
             } else {
                 for res in results {
                     if res.success {
-                        println!("{} {} ({})", "✓ УСПЕШНО ОТМЕЧЕН:".green().bold(), res.lesson_name, res.lesson_time);
+                        println!("{} {} ({})", "✓ ЗАНЯТИЕ ПОДТВЕРЖДЕНО:".green().bold(), res.lesson_name, res.lesson_time);
                     } else {
-                        println!("{} {} ({}) - {}", "✗ Ошибка отметки:".red().bold(), res.lesson_name, res.lesson_time, res.server_response);
+                        println!("{} {} ({}) - {}", "✗ Ошибка подтверждения:".red().bold(), res.lesson_name, res.lesson_time, res.server_response);
                     }
                 }
             }
@@ -260,7 +260,7 @@ async fn main() -> anyhow::Result<()> {
 
         Commands::Watch { interval } => {
             let client = get_authenticated_client()?;
-            println!("{} {} {}", "⚡ Запущен демон автоотметки Openbonch (интервал:".green().bold(), interval, "сек)".green().bold());
+            println!("{} {} {}", "⚡ Запущен фоновый процесс синхронизации Openbonch (интервал:".green().bold(), interval, "сек)".green().bold());
             println!("{}", "Нажмите Ctrl+C для остановки.\n".dimmed());
 
             loop {
@@ -269,7 +269,7 @@ async fn main() -> anyhow::Result<()> {
                     Ok(results) => {
                         for res in results {
                             if res.success {
-                                println!("[{}] {} {} ({})", now.dimmed(), "✓ ОТМЕЧЕН:".green().bold(), res.lesson_name, res.lesson_time);
+                                println!("[{}] {} {} ({})", now.dimmed(), "✓ ПОДТВЕРЖДЕНО:".green().bold(), res.lesson_name, res.lesson_time);
                             }
                         }
                     }
