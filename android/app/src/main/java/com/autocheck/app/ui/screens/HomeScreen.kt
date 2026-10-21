@@ -957,17 +957,17 @@ fun HomeScreen(
             "Волков Денис Игоревич" to "312/1"
         )
 
-        val filteredRooms = remember(query) {
+        val filteredRooms: List<Pair<String, String>> = remember(query) {
             if (query.isBlank()) allRooms
             else allRooms.filter { it.first.contains(query, ignoreCase = true) || it.second.contains(query, ignoreCase = true) }
         }
 
-        val filteredGroups = remember(query) {
+        val filteredGroups: List<String> = remember(query) {
             if (query.isBlank()) GroupScheduleProvider.POPULAR_GROUPS
             else GroupScheduleProvider.POPULAR_GROUPS.filter { it.contains(query, ignoreCase = true) }
         }
 
-        val filteredTeachers = remember(query) {
+        val filteredTeachers: List<Pair<String, String>> = remember(query) {
             if (query.isBlank()) allTeachers
             else allTeachers.filter { it.first.contains(query, ignoreCase = true) }
         }
@@ -1067,7 +1067,7 @@ fun HomeScreen(
                                     modifier = Modifier.padding(top = 8.dp, bottom = 2.dp)
                                 )
                             }
-                            items(filteredGroups) { grp ->
+                            items(filteredGroups) { grp: String ->
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()

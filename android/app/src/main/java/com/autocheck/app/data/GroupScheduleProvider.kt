@@ -1,7 +1,7 @@
 package com.autocheck.app.data
 
 object GroupScheduleProvider {
-    val POPULAR_GROUPS = listOf(
+    val POPULAR_GROUPS: List<String> = listOf(
         "ИБТС-2613",
         "ИКВТ-31",
         "ИКВТ-32",

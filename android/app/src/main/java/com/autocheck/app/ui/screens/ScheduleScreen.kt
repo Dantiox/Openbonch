@@ -476,7 +476,7 @@ fun ScheduleScreen(
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .clip(RoundedCornerShape(10.dp))
-                                                .background(Ios.colors.surface)
+                                                .background(Ios.colors.fill)
                                                 .clickable { onNavigateToMap(l.auditorium) }
                                                 .padding(10.dp),
                                             verticalAlignment = Alignment.CenterVertically
