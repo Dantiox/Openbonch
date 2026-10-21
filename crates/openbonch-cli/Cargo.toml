@@ -1,0 +1,23 @@
+[package]
+name = "openbonch-cli"
+version = "0.1.0"
+edition = "2021"
+authors = ["Dantiox"]
+description = "Fast multiplatform CLI client and auto-checkin daemon for SPbSUT (Bonch) students"
+license = "MIT"
+
+[[bin]]
+name = "openbonch"
+path = "src/main.rs"
+
+[dependencies]
+openbonch-core = { path = "../openbonch-core" }
+clap = { version = "4.5", features = ["derive", "cargo"] }
+colored = "2.1"
+tokio = { version = "1.38", features = ["full"] }
+directories = "5.0"
+rpassword = "7.3"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+chrono = "0.4"
+anyhow = "1.0"

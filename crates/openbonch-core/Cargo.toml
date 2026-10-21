@@ -1,0 +1,18 @@
+[package]
+name = "openbonch-core"
+version = "0.1.0"
+edition = "2021"
+authors = ["Dantiox"]
+description = "Core portable FOSS engine for SPbSUT (Bonch) student services"
+license = "MIT"
+
+[dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "cookies", "json"] }
+tokio = { version = "1.38", features = ["macros", "rt-multi-thread", "time"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+scraper = "0.20"
+regex = "1.10"
+chrono = { version = "0.4", features = ["serde"] }
+thiserror = "1.0"
+tracing = "0.1"
