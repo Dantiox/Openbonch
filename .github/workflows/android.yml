@@ -25,54 +25,65 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
 
+      - name: Compute Build Version
+        id: versioning
+        run: |
+          BUILD_NUM="${{ github.run_number }}"
+          VERSION="0.3.0.${BUILD_NUM}"
+          TAG="v${VERSION}"
+          echo "VERSION=${VERSION}" >> $GITHUB_ENV
+          echo "TAG=${TAG}" >> $GITHUB_ENV
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "TAG=${TAG}" >> $GITHUB_OUTPUT
+
       - name: Build Debug APK
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+          ./gradlew assembleDebug -PversionCode=${{ github.run_number }} -PversionName=${{ env.VERSION }} --no-daemon
 
       - name: Locate and Rename APK for Distribution
         run: |
           mkdir -p dist
           find android -name "*debug.apk" -exec cp {} dist/Openbonch-debug.apk \;
+          cp dist/Openbonch-debug.apk dist/Openbonch-${{ env.TAG }}.apk
           ls -la dist/
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Openbonch-Android-APK
-          path: dist/Openbonch-debug.apk
+          name: Openbonch-${{ env.TAG }}
+          path: dist/*
           retention-days: 14
 
-      - name: Create or Update GitHub Release
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/heads/main')
         with:
-          tag_name: v0.2.1-preview
-          name: "Openbonch v0.2.1 (Строгая AGPLv3, Пользовательское соглашение и Защита FOSS)"
+          tag_name: ${{ env.TAG }}
+          name: "Openbonch ${{ env.TAG }}"
           body: |
-            ## Openbonch Android APK v0.2.1
+            ## Openbonch Android APK ${{ env.TAG }}
 
             ### 🚀 Что нового:
-            * 🛡️ **Обязательное Пользовательское соглашение (Clickwrap Agreement)**:
-              * Непропускаемый диалог при первом запуске (ст. 438 ГК РФ).
-              * Обязательное явное подтверждение ознакомления с лицензией GNU AGPLv3 и безоговорочным отказом автора от ответственности (Секции 15–17 AGPLv3, ст. 1286.1 ГК РФ).
-              * Фиксация факта акцепта в аппаратном хранилище.
-              * Возможность повторного просмотра в разделе *Настройки -> Лицензия и условия*.
-            * ⚖️ **Защита от закрытия кода (AGPLv3 Section 7 & 13)**:
-              * Полное юридическое закрытие SaaS-лазейки: любые сетевые/серверные модификации обязаны публиковать полный исходный код.
-              * Добавлен официальный документ `TERMS_OF_USE.md`.
-            * 📅 **Интерактивное расписание занятий** (вкладка "Пары"):
-              * Дни недели (Пн-Сб) со списком пар и временными слотами.
-              * Поддержка ручного подтверждения в один тап прямо из карточки пары при появлении кнопки «Начать занятие».
-              * Отображение номера аудитории, предмета и статуса.
-            * 🗺️ **Интерактивный навигатор кампуса** (вкладка "Карта"):
-              * Выбор корпусов: Большевиков 1, Большевиков 2, Мойка 61, Английский 3 (ВУЦ).
-              * Поэтажные схемы со свайпами и масштабированием (pinch-to-zoom).
-              * Поиск по аудиториям, кабинетам, столовой, деканатам.
-              * Прямой переход из расписания на нужный этаж/корпус по клику на аудиторию!
-            * ⚡ **Локальная фоновая автоматизация** (Foreground Service с Android KeyStore шифрованием).
-            * 🛡️ **100% Local-First & FOSS**: Никаких сторонних серверов, данные не покидают устройство.
-          files: dist/Openbonch-debug.apk
+            * 🧭 **Точный коридорный навигатор кампуса**:
+              * Полноценная маршрутизация по коридорам (векторный граф проходов строго по зданию, без резки стен).
+              * Точное положение главного входа кампуса (Большевиков 22к1).
+              * Маршруты от входа, от аудитории к аудитории, и быстрая опция «Из прошлой аудитории в следующую».
+              * Многоэтажная навигация с авто-переходами по лестницам/лифтам и переходами 1 и 3 этажей между корпусами.
+            * 🔄 **Фиксация меток при вращении**:
+              * Номера аудиторий и иконки инфраструктуры (туалеты, лифты, лестницы) всегда остаются читаемыми и горизонтальными.
+            * 📅 **Расписание по группам студентов**:
+              * Подтягивание расписания группы из ЛК СПбГУТ при входе.
+              * Возможность выбора и переключения учебных групп университета.
+            * 🎨 **8 цветовых тем оформления**:
+              * Светлая, Тёмная, Системная, OLED, Бонч Оранжевая, Киберпанк, Изумрудная, Индиго.
+            * 🔘 **Полноценный функционал всех кнопок**:
+              * Активные карточки пар с быстрым построением маршрута.
+              * Плитки быстрого доступа («Расписание», «Карта», «Преподаватели», «Личный кабинет»).
+              * Центрирование, зум, фильтры, уведомления и поиск.
+          files: |
+            dist/Openbonch-${{ env.TAG }}.apk
+            dist/Openbonch-debug.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

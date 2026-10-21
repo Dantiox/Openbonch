@@ -11,6 +11,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,34 +21,46 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.Bookmark
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.DoneAll
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.HourglassEmpty
+import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.MeetingRoom
 import androidx.compose.material.icons.rounded.MenuBook
 import androidx.compose.material.icons.rounded.Navigation
 import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.School
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Star
 import androidx.compose.material.icons.rounded.Stop
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -153,8 +166,16 @@ fun HomeScreen(
     onNavigateToMap: (String) -> Unit = {},
 ) {
     val scroll = rememberScrollState()
+    val currentGroup by AutoClickState.currentGroup.collectAsStateWithLifecycle()
     val scheduleData by AutoClickState.schedule.collectAsStateWithLifecycle()
     var searchInput by remember { mutableStateOf("") }
+
+    var showGroupDialog by remember { mutableStateOf(false) }
+    var showNotificationsDialog by remember { mutableStateOf(false) }
+    var showSearchDialog by remember { mutableStateOf(false) }
+    var showSubjectsDialog by remember { mutableStateOf(false) }
+    var showFavoritesDialog by remember { mutableStateOf(false) }
+    var unreadNotifications by remember { mutableStateOf(70) }
 
     LaunchedEffect(resetSignal) { if (resetSignal > 0) scroll.animateScrollTo(0) }
 
@@ -162,7 +183,7 @@ fun HomeScreen(
     val todayLessons = scheduleData?.days?.firstOrNull()?.lessons ?: emptyList()
     val nextLesson = todayLessons.firstOrNull()
 
-    val nextLessonName = nextLesson?.name ?: "Информатика"
+    val nextLessonName = nextLesson?.name ?: "Криптографические методы защиты информации"
     val nextLessonAud = nextLesson?.auditorium?.ifBlank { "521/2" } ?: "521/2"
     val nextLessonTeacher = nextLesson?.teacher?.ifBlank { "Шиян Павел Анатольевич" } ?: "Шиян Павел Анатольевич"
     val nextLessonType = nextLesson?.type?.ifBlank { "Практические занятия • пара 1" } ?: "Практические занятия • пара 1"
@@ -196,13 +217,26 @@ fun HomeScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column {
-                        Text(
-                            text = "Четверг, 22 октября • ИБТС-2613",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = Color.White.copy(alpha = 0.9f)
-                        )
+                    Column(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { showGroupDialog = true }
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "Четверг, 22 октября • $currentGroup",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color.White.copy(alpha = 0.95f)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Icon(
+                                Icons.Rounded.Groups,
+                                contentDescription = "Сменить группу",
+                                tint = Color.White.copy(alpha = 0.8f),
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
                             text = "Привет! 👋",
@@ -217,7 +251,11 @@ fun HomeScreen(
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         // Колокольчик с бейджем уведомлений
-                        Box {
+                        Box(
+                            modifier = Modifier
+                                .clip(CircleShape)
+                                .clickable { showNotificationsDialog = true }
+                        ) {
                             Box(
                                 modifier = Modifier
                                     .size(42.dp)
@@ -232,19 +270,21 @@ fun HomeScreen(
                                     modifier = Modifier.size(22.dp)
                                 )
                             }
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.TopEnd)
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(Color(0xFFE53935))
-                                    .padding(horizontal = 5.dp, vertical = 2.dp)
-                            ) {
-                                Text(
-                                    text = "70",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = Color.White
-                                )
+                            if (unreadNotifications > 0) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color(0xFFE53935))
+                                        .padding(horizontal = 5.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = "$unreadNotifications",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White
+                                    )
+                                }
                             }
                         }
 
@@ -273,7 +313,7 @@ fun HomeScreen(
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable { onNavigateToMap(searchInput) },
+                        .clickable { showSearchDialog = true },
                     shape = RoundedCornerShape(20.dp),
                     colors = CardDefaults.cardColors(containerColor = Color.White.copy(alpha = 0.15f)),
                     border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f))
@@ -548,7 +588,7 @@ fun HomeScreen(
                         icon = Icons.Rounded.Groups,
                         iconTint = Color(0xFF38BDF8),
                         modifier = Modifier.weight(1f)
-                    ) {}
+                    ) { showGroupDialog = true }
 
                     // Аудитории (Переход в карту)
                     QuickTile(
@@ -564,7 +604,7 @@ fun HomeScreen(
                         icon = Icons.Rounded.MenuBook,
                         iconTint = Color(0xFFA78BFA),
                         modifier = Modifier.weight(1f)
-                    ) {}
+                    ) { showSubjectsDialog = true }
 
                     // Избранное
                     QuickTile(
@@ -572,7 +612,7 @@ fun HomeScreen(
                         icon = Icons.Rounded.Star,
                         iconTint = Color(0xFFFBBF24),
                         modifier = Modifier.weight(1f)
-                    ) {}
+                    ) { showFavoritesDialog = true }
                 }
             }
 
@@ -640,6 +680,691 @@ fun HomeScreen(
                 }
             }
         }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // ДИАЛОГ 1: Выбор учебной группы (Мультигруппы)
+    // ─────────────────────────────────────────────────────────────
+    if (showGroupDialog) {
+        var customGroupText by remember { mutableStateOf("") }
+        AlertDialog(
+            onDismissRequest = { showGroupDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Rounded.Groups,
+                        contentDescription = null,
+                        tint = Color(0xFFFF9800),
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Выбор учебной группы", fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp)
+                ) {
+                    Text(
+                        text = "Текущая группа: $currentGroup",
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFFFF9800)
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = "Популярные группы СПбГУТ:",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Ios.colors.secondaryLabel
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        GroupScheduleProvider.POPULAR_GROUPS.forEach { g ->
+                            val isSelected = g.equals(currentGroup, ignoreCase = true)
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(
+                                        if (isSelected) Color(0xFFFF9800)
+                                        else Ios.colors.card
+                                    )
+                                    .border(
+                                        1.dp,
+                                        if (isSelected) Color(0xFFFF9800) else Ios.colors.separator,
+                                        RoundedCornerShape(10.dp)
+                                    )
+                                    .clickable {
+                                        AutoClickState.setGroup(g)
+                                        showGroupDialog = false
+                                    }
+                                    .padding(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = g,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isSelected) Color.White else Ios.colors.label
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Или введите произвольную группу:",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = Ios.colors.secondaryLabel
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    OutlinedTextField(
+                        value = customGroupText,
+                        onValueChange = { customGroupText = it },
+                        placeholder = { Text("Например: ИКВТ-31, ИСТ-11") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (customGroupText.isNotBlank()) {
+                            AutoClickState.setGroup(customGroupText)
+                        }
+                        showGroupDialog = false
+                    }
+                ) {
+                    Text("Применить", fontWeight = FontWeight.Bold, color = Color(0xFFFF9800))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showGroupDialog = false }) {
+                    Text("Отмена", color = Ios.colors.secondaryLabel)
+                }
+            }
+        )
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // ДИАЛОГ 2: Уведомления ЛК Бонч (Колокольчик)
+    // ─────────────────────────────────────────────────────────────
+    if (showNotificationsDialog) {
+        val notifications = listOf(
+            Triple(
+                "Автоматическая отметка",
+                "Отметка посещаемости успешно выставлена на занятие «$nextLessonName» (ауд. $nextLessonAud).",
+                "10 мин назад"
+            ),
+            Triple(
+                "Расписание обновлено",
+                "Расписание для группы $currentGroup синхронизировано с базой расписания СПбГУТ.",
+                "1 час назад"
+            ),
+            Triple(
+                "Деканат СПбГУТ",
+                "Начался прием документов на материальную помощь и повышенную государственную стипендию.",
+                "Вчера"
+            ),
+            Triple(
+                "Навигатор кампуса",
+                "Доступна векторная карта коридоров 1–7 этажей и переходов между корпусами.",
+                "2 дня назад"
+            ),
+            Triple(
+                "Сессия авторизации",
+                "Связь с личным кабинетом lk.sut.ru активна.",
+                "3 дня назад"
+            )
+        )
+
+        AlertDialog(
+            onDismissRequest = { showNotificationsDialog = false },
+            title = {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Rounded.Notifications,
+                            contentDescription = null,
+                            tint = Color(0xFFFF6D00),
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Уведомления ЛК", fontWeight = FontWeight.Bold)
+                    }
+                    if (unreadNotifications > 0) {
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFFE53935))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "$unreadNotifications новых",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                    }
+                }
+            },
+            text = {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(notifications) { (title, body, time) ->
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = CardDefaults.cardColors(containerColor = Ios.colors.card),
+                            border = BorderStroke(1.dp, Ios.colors.separator)
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = title,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFFF9800)
+                                    )
+                                    Text(
+                                        text = time,
+                                        fontSize = 11.sp,
+                                        color = Ios.colors.tertiaryLabel
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = body,
+                                    fontSize = 12.sp,
+                                    color = Ios.colors.label,
+                                    lineHeight = 16.sp
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        unreadNotifications = 0
+                        showNotificationsDialog = false
+                    }
+                ) {
+                    Icon(
+                        Icons.Rounded.DoneAll,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = Color(0xFFFF9800)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Прочитать все", fontWeight = FontWeight.Bold, color = Color(0xFFFF9800))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNotificationsDialog = false }) {
+                    Text("Закрыть", color = Ios.colors.secondaryLabel)
+                }
+            }
+        )
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // ДИАЛОГ 3: Быстрый поиск (Аудитории, преподаватели, группы)
+    // ─────────────────────────────────────────────────────────────
+    if (showSearchDialog) {
+        var query by remember { mutableStateOf("") }
+
+        val allRooms = listOf(
+            "521/2" to "Лаборатория информационной безопасности • 2к, 5 эт.",
+            "501/1" to "Поточная лекционная аудитория • 1к, 5 эт.",
+            "334/1" to "Кафедра ИБТС • 1к, 3 эт.",
+            "200/1" to "Актовый зал СПбГУТ • 1к, 2 эт.",
+            "101/1" to "Студенческая столовая • 1к, 1 эт.",
+            "312/1" to "Семинарская аудитория • 1к, 3 эт.",
+            "601/1" to "Лекционная аудитория • 1к, 6 эт.",
+            "Библиотека" to "Читальный зал • 1к, 2 эт.",
+            "Гардероб" to "Главный холл входа • 1к, 1 эт."
+        )
+
+        val allTeachers = listOf(
+            "Шиян Павел Анатольевич" to "521/2",
+            "Карлов Андрей Владимирович" to "501/1",
+            "Кучерявый Андрей Евгеньевич" to "200/1",
+            "Смирнов Дмитрий Юрьевич" to "332/1",
+            "Волков Денис Игоревич" to "312/1"
+        )
+
+        val filteredRooms = remember(query) {
+            if (query.isBlank()) allRooms
+            else allRooms.filter { it.first.contains(query, ignoreCase = true) || it.second.contains(query, ignoreCase = true) }
+        }
+
+        val filteredGroups = remember(query) {
+            if (query.isBlank()) GroupScheduleProvider.POPULAR_GROUPS
+            else GroupScheduleProvider.POPULAR_GROUPS.filter { it.contains(query, ignoreCase = true) }
+        }
+
+        val filteredTeachers = remember(query) {
+            if (query.isBlank()) allTeachers
+            else allTeachers.filter { it.first.contains(query, ignoreCase = true) }
+        }
+
+        AlertDialog(
+            onDismissRequest = { showSearchDialog = false },
+            title = {
+                Text("Быстрый поиск СПбГУТ", fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 460.dp)
+                ) {
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        placeholder = { Text("Аудитория, группа или преподаватель...") },
+                        leadingIcon = {
+                            Icon(Icons.Rounded.Search, contentDescription = null, tint = Color(0xFFFF9800))
+                        },
+                        trailingIcon = {
+                            if (query.isNotBlank()) {
+                                Icon(
+                                    Icons.Rounded.Close,
+                                    contentDescription = "Очистить",
+                                    tint = Ios.colors.secondaryLabel,
+                                    modifier = Modifier.clickable { query = "" }
+                                )
+                            }
+                        },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Блок найденных аудиторий
+                        if (filteredRooms.isNotEmpty()) {
+                            item {
+                                Text(
+                                    text = "АУДИТОРИИ И МЕСТА",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFFF9800),
+                                    modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
+                                )
+                            }
+                            items(filteredRooms) { (room, desc) ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(Ios.colors.card)
+                                        .clickable {
+                                            showSearchDialog = false
+                                            onNavigateToMap(room)
+                                        }
+                                        .padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.LocationOn,
+                                        contentDescription = null,
+                                        tint = Color(0xFF34D399),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(text = room, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                        Text(text = desc, fontSize = 11.sp, color = Ios.colors.secondaryLabel)
+                                    }
+                                    Text(
+                                        text = "Карта",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color(0xFFFF9800)
+                                    )
+                                }
+                            }
+                        }
+
+                        // Блок найденных групп
+                        if (filteredGroups.isNotEmpty()) {
+                            item {
+                                Text(
+                                    text = "УЧЕБНЫЕ ГРУППЫ",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF38BDF8),
+                                    modifier = Modifier.padding(top = 8.dp, bottom = 2.dp)
+                                )
+                            }
+                            items(filteredGroups) { grp ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(Ios.colors.card)
+                                        .clickable {
+                                            AutoClickState.setGroup(grp)
+                                            showSearchDialog = false
+                                        }
+                                        .padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.Groups,
+                                        contentDescription = null,
+                                        tint = Color(0xFF38BDF8),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(text = grp, fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f))
+                                    Text(
+                                        text = "Выбрать",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color(0xFF38BDF8)
+                                    )
+                                }
+                            }
+                        }
+
+                        // Блок найденных преподавателей
+                        if (filteredTeachers.isNotEmpty()) {
+                            item {
+                                Text(
+                                    text = "ПРЕПОДАВАТЕЛИ",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFA78BFA),
+                                    modifier = Modifier.padding(top = 8.dp, bottom = 2.dp)
+                                )
+                            }
+                            items(filteredTeachers) { (teacher, aud) ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(Ios.colors.card)
+                                        .clickable {
+                                            showSearchDialog = false
+                                            onNavigateToMap(aud)
+                                        }
+                                        .padding(10.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.Person,
+                                        contentDescription = null,
+                                        tint = Color(0xFFA78BFA),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(text = teacher, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                        Text(text = "Кабинет $aud", fontSize = 11.sp, color = Ios.colors.secondaryLabel)
+                                    }
+                                    Text(
+                                        text = "Найти",
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.SemiBold,
+                                        color = Color(0xFFFF9800)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showSearchDialog = false }) {
+                    Text("Закрыть", color = Color(0xFFFF9800))
+                }
+            }
+        )
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // ДИАЛОГ 4: Предметы группы (Быстрый доступ)
+    // ─────────────────────────────────────────────────────────────
+    if (showSubjectsDialog) {
+        val distinctLessons = remember(scheduleData) {
+            val list = scheduleData?.days?.flatMap { it.lessons } ?: emptyList()
+            list.distinctBy { it.name }
+        }
+
+        AlertDialog(
+            onDismissRequest = { showSubjectsDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Rounded.MenuBook,
+                        contentDescription = null,
+                        tint = Color(0xFFA78BFA),
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Дисциплины: $currentGroup", fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                if (distinctLessons.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("Нет данных о дисциплинах", color = Ios.colors.secondaryLabel)
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 420.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(distinctLessons) { lesson ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = CardDefaults.cardColors(containerColor = Ios.colors.card),
+                                border = BorderStroke(1.dp, Ios.colors.separator)
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(
+                                        text = lesson.name,
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Ios.colors.label
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "👤 ${lesson.teacher.ifBlank { "Преподаватель кафедры" }}",
+                                        fontSize = 12.sp,
+                                        color = Ios.colors.secondaryLabel
+                                    )
+                                    Spacer(modifier = Modifier.height(6.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = lesson.type,
+                                            fontSize = 11.sp,
+                                            color = Color(0xFFA78BFA)
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(Color(0xFFFF6D00).copy(alpha = 0.2f))
+                                                .clickable {
+                                                    showSubjectsDialog = false
+                                                    onNavigateToMap(lesson.auditorium)
+                                                }
+                                                .padding(horizontal = 8.dp, vertical = 4.dp)
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(
+                                                    Icons.Rounded.Navigation,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFFFF6D00),
+                                                    modifier = Modifier.size(12.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = "Ауд. ${lesson.auditorium}",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = Color(0xFFFF6D00)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showSubjectsDialog = false }) {
+                    Text("Закрыть", color = Color(0xFFFF9800))
+                }
+            }
+        )
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // ДИАЛОГ 5: Избранные места и аудитории (Быстрый доступ)
+    // ─────────────────────────────────────────────────────────────
+    if (showFavoritesDialog) {
+        val favorites = listOf(
+            Triple("521/2", "Лаборатория защиты информации (2к, 5 эт.)", Icons.Rounded.MeetingRoom),
+            Triple("501/1", "Главная поточная лекционная (1к, 5 эт.)", Icons.Rounded.MeetingRoom),
+            Triple("334/1", "Кафедра ИБТС (1к, 3 эт.)", Icons.Rounded.School),
+            Triple("200/1", "Актовый зал СПбГУТ (1к, 2 эт.)", Icons.Rounded.MeetingRoom),
+            Triple("101/1", "Студенческая столовая (1к, 1 эт.)", Icons.Rounded.Bookmark),
+            Triple("Библиотека", "Читальный зал и абонемент (1к, 2 эт.)", Icons.Rounded.MenuBook),
+            Triple("Гардероб", "Центральный гардероб входа (1к, 1 эт.)", Icons.Rounded.Bookmark),
+            Triple("Переход", "Крытый надземный мост между 1к и 2к (3 эт.)", Icons.Rounded.Navigation)
+        )
+
+        AlertDialog(
+            onDismissRequest = { showFavoritesDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Rounded.Star,
+                        contentDescription = null,
+                        tint = Color(0xFFFBBF24),
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Избранные места СПбГУТ", fontWeight = FontWeight.Bold)
+                }
+            },
+            text = {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(favorites) { (name, desc, icon) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .background(Ios.colors.card)
+                                .clickable {
+                                    showFavoritesDialog = false
+                                    onNavigateToMap(name)
+                                }
+                                .padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(36.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .background(Color(0xFFFBBF24).copy(alpha = 0.2f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    icon,
+                                    contentDescription = null,
+                                    tint = Color(0xFFFBBF24),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = name,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Ios.colors.label
+                                )
+                                Text(
+                                    text = desc,
+                                    fontSize = 11.sp,
+                                    color = Ios.colors.secondaryLabel
+                                )
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(Color(0xFFFF9800))
+                                    .padding(horizontal = 8.dp, vertical = 5.dp)
+                            ) {
+                                Text(
+                                    text = "Маршрут",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showFavoritesDialog = false }) {
+                    Text("Закрыть", color = Color(0xFFFF9800))
+                }
+            }
+        )
     }
 }
 

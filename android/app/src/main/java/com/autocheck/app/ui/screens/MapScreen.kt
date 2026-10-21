@@ -50,14 +50,19 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Stairs
 import androidx.compose.material.icons.rounded.SwapVert
 import androidx.compose.material.icons.rounded.Wc
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -309,8 +314,8 @@ private fun loadFloors(context: Context): Map<Int, FloorMapData> {
     return result
 }
 
-// Координаты главного входа университета на 1 этаже
-private val MAIN_ENTRANCE_POINT = Offset(1080f, 180f)
+// Точные координаты главного входа университета на 1 этаже (Большевиков 22к1, согласовано с SVG-схемой кампуса)
+private val MAIN_ENTRANCE_POINT = Offset(1204f, 204.5f)
 private const val MAIN_ENTRANCE_NAME = "Главный вход"
 
 // ─────────────────────────────────────────────────────────────
@@ -324,13 +329,14 @@ fun MapScreen(
 ) {
     val context = LocalContext.current
     val allFloors = remember { loadFloors(context) }
+    val campusRouter = remember { CampusRouter.load(context) }
     val scheduleData by AutoClickState.schedule.collectAsStateWithLifecycle()
 
     var currentTheme by remember { mutableStateOf(MapTheme.TACTICAL) }
     var showThemeMenu by remember { mutableStateOf(false) }
     var selectedAmenityFilter by remember { mutableStateOf(AmenityFilter.ALL) }
 
-    var selectedCampus by remember { mutableIntStateOf(0) } // 0: СПбГУТ, 1: СПбКТ
+    var selectedCampus by remember { mutableIntStateOf(0) } // 0: СПбГУТ (Большевиков), 1: СПбКТ / Мойка 61
     var selectedFloor by remember { mutableIntStateOf(1) }
     var searchQuery by remember { mutableStateOf(highlightRoom ?: "") }
     
@@ -348,6 +354,10 @@ fun MapScreen(
     var destAmenity by remember { mutableStateOf<Amenity?>(null) }
 
     var isSelectingOrigin by remember { mutableStateOf(false) }
+    var isSelectingDest by remember { mutableStateOf(false) }
+    var showNotificationsDialog by remember { mutableStateOf(false) }
+    var activeTappedRoom by remember { mutableStateOf<RoomShape?>(null) }
+    var activeTappedAmenity by remember { mutableStateOf<Amenity?>(null) }
 
     // Масштаб, панорамирование и угол вращения карты
     var scale by remember { mutableFloatStateOf(0.72f) }
@@ -501,6 +511,43 @@ fun MapScreen(
         }
     }
 
+    // Расчет точного коридорного маршрута на графе помещений кампуса
+    val originPoint = if (isOriginDefaultEntrance) {
+        MAIN_ENTRANCE_POINT
+    } else {
+        originRoom?.let { Offset(it.x + it.w / 2f, it.y + it.h / 2f) } 
+            ?: originAmenity?.let { Offset(it.x, it.y) }
+    }
+
+    val destPoint = destRoom?.let { Offset(it.x + it.w / 2f, it.y + it.h / 2f) }
+        ?: destAmenity?.let { Offset(it.x, it.y) }
+
+    val startTargetName = if (isOriginDefaultEntrance) "Главный вход" else (originRoom?.name ?: originAmenity?.name ?: "")
+    val endTargetName = destRoom?.name ?: destAmenity?.name ?: ""
+
+    val fullRoute = remember(
+        originFloor, startTargetName, originPoint,
+        destFloor, endTargetName, destPoint,
+        isOriginDefaultEntrance, campusRouter
+    ) {
+        if (destPoint != null || endTargetName.isNotEmpty()) {
+            campusRouter.findPath(
+                startFloor = originFloor,
+                startName = startTargetName,
+                startPoint = originPoint,
+                destFloor = destFloor,
+                destName = endTargetName,
+                destPoint = destPoint
+            )
+        } else {
+            emptyList()
+        }
+    }
+
+    val routeSteps = remember(fullRoute, endTargetName) {
+        campusRouter.splitIntoSteps(fullRoute, endTargetName.ifBlank { "цели" })
+    }
+
     // Подсказки поиска (аудитории + инфраструктура)
     val searchSuggestions = remember(searchQuery, allFloors) {
         if (searchQuery.trim().length >= 2) {
@@ -586,10 +633,14 @@ fun MapScreen(
                                 originFloor = selectedFloor
                                 isOriginDefaultEntrance = false
                                 isSelectingOrigin = false
-                            } else {
+                            } else if (isSelectingDest) {
                                 destAmenity = tappedAmenity
                                 destRoom = null
                                 destFloor = selectedFloor
+                                isSelectingDest = false
+                            } else {
+                                activeTappedAmenity = tappedAmenity
+                                activeTappedRoom = null
                             }
                             return@detectTapGestures
                         }
@@ -608,12 +659,19 @@ fun MapScreen(
                                 originFloor = selectedFloor
                                 isOriginDefaultEntrance = false
                                 isSelectingOrigin = false
+                            } else if (isSelectingDest) {
+                                destRoom = tappedRoom
+                                destAmenity = null
+                                destFloor = selectedFloor
+                                isSelectingDest = false
                             } else {
                                 selectedRoom = tappedRoom
                                 destRoom = tappedRoom
                                 destAmenity = null
                                 destFloor = selectedFloor
                                 searchQuery = tappedRoom.name
+                                activeTappedRoom = tappedRoom
+                                activeTappedAmenity = null
                             }
                         }
                     }
@@ -846,68 +904,38 @@ fun MapScreen(
                         drawContext.canvas.nativeCanvas.restore()
                     }
 
-                    // 6. Отрисовка маршрута навигатора (Одноэтажный и многоэтажный)
-                    val originPoint = if (isOriginDefaultEntrance) {
-                        MAIN_ENTRANCE_POINT
-                    } else {
-                        originRoom?.let { Offset(it.x + it.w / 2f, it.y + it.h / 2f) } 
-                            ?: originAmenity?.let { Offset(it.x, it.y) }
-                    }
-
-                    val destPoint = destRoom?.let { Offset(it.x + it.w / 2f, it.y + it.h / 2f) }
-                        ?: destAmenity?.let { Offset(it.x, it.y) }
-
-                    if (originPoint != null && destPoint != null) {
-                        if (originFloor == destFloor) {
-                            // Одноэтажный маршрут
-                            if (selectedFloor == originFloor) {
-                                drawLine(
-                                    color = Color(0xFFFF6D00),
-                                    start = originPoint,
-                                    end = destPoint,
-                                    strokeWidth = 6f,
-                                    cap = StrokeCap.Round
-                                )
-                                drawCircle(color = Color(0xFF00E676), radius = 9f, center = originPoint)
-                                drawCircle(color = Color(0xFFFF6D00), radius = 9f, center = destPoint)
-                            }
-                        } else {
-                            // Многоэтажный маршрут через лестницу/лифт
-                            val stairOrigin = findClosestStair(originFloor, originPoint)
-                            val stairDest = stairOrigin?.let { so ->
-                                allFloors[destFloor]?.amenities?.minByOrNull { 
-                                    val dx = it.x - so.x
-                                    val dy = it.y - so.y
-                                    dx * dx + dy * dy
-                                }
-                            }
-
-                            if (selectedFloor == originFloor && stairOrigin != null) {
-                                // Отрезок маршрута на этаже отправления: от старта до лестницы
-                                val stairPoint = Offset(stairOrigin.x, stairOrigin.y)
-                                drawLine(
-                                    color = Color(0xFFFF6D00),
-                                    start = originPoint,
-                                    end = stairPoint,
-                                    strokeWidth = 6f,
-                                    cap = StrokeCap.Round
-                                )
-                                drawCircle(color = Color(0xFF00E676), radius = 9f, center = originPoint)
-                                drawCircle(color = Color(0xFFFF9800), radius = 10f, center = stairPoint)
-                            } else if (selectedFloor == destFloor && stairDest != null) {
-                                // Отрезок маршрута на этаже назначения: от лестницы до цели
-                                val stairPoint = Offset(stairDest.x, stairDest.y)
-                                drawLine(
-                                    color = Color(0xFFFF6D00),
-                                    start = stairPoint,
-                                    end = destPoint,
-                                    strokeWidth = 6f,
-                                    cap = StrokeCap.Round
-                                )
-                                drawCircle(color = Color(0xFFFF9800), radius = 10f, center = stairPoint)
-                                drawCircle(color = Color(0xFFFF6D00), radius = 9f, center = destPoint)
+                    // 6. Отрисовка точного коридорного маршрута навигатора (без резки стен)
+                    val currentFloorNodes = fullRoute.filter { it.floor == selectedFloor }
+                    if (currentFloorNodes.size >= 2) {
+                        val routePath = Path().apply {
+                            moveTo(currentFloorNodes[0].x, currentFloorNodes[0].y)
+                            for (i in 1 until currentFloorNodes.size) {
+                                lineTo(currentFloorNodes[i].x, currentFloorNodes[i].y)
                             }
                         }
+                        // Мягкое неоновое свечение вдоль коридора
+                        drawPath(
+                            path = routePath,
+                            color = Color(0x66FF6D00),
+                            style = Stroke(width = 14f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+                        )
+                        // Основная яркая линия маршрута
+                        drawPath(
+                            path = routePath,
+                            color = Color(0xFFFF6D00),
+                            style = Stroke(width = 6f, cap = StrokeCap.Round, join = StrokeJoin.Round)
+                        )
+                        // Точки старта и финиша на этом этаже
+                        val firstPt = Offset(currentFloorNodes.first().x, currentFloorNodes.first().y)
+                        val lastPt = Offset(currentFloorNodes.last().x, currentFloorNodes.last().y)
+                        drawCircle(color = Color(0xFF00E676), radius = 9f, center = firstPt)
+                        drawCircle(color = Color.White, radius = 4f, center = firstPt)
+                        drawCircle(color = Color(0xFFFF3D00), radius = 9f, center = lastPt)
+                        drawCircle(color = Color.White, radius = 4f, center = lastPt)
+                    } else if (currentFloorNodes.size == 1) {
+                        val pt = Offset(currentFloorNodes[0].x, currentFloorNodes[0].y)
+                        drawCircle(color = Color(0xFFFF6D00), radius = 10f, center = pt)
+                        drawCircle(color = Color.White, radius = 4f, center = pt)
                     }
                 }
             }
@@ -1363,13 +1391,13 @@ fun MapScreen(
                             .size(52.dp)
                             .clip(RoundedCornerShape(16.dp))
                             .background(currentTheme.defaultRoomFill)
-                            .clickable { },
+                            .clickable { showNotificationsDialog = true },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             Icons.Rounded.Notifications,
                             contentDescription = "Уведомления",
-                            tint = currentTheme.textSecondary,
+                            tint = Color(0xFFFF6D00),
                             modifier = Modifier.size(22.dp)
                         )
                     }
@@ -1468,7 +1496,12 @@ fun MapScreen(
                             .weight(1f)
                             .clip(RoundedCornerShape(14.dp))
                             .background(currentTheme.defaultRoomFill)
-                            .clickable { }
+                            .border(
+                                1.dp,
+                                if (isSelectingDest) Color(0xFFFF6D00) else Color.Transparent,
+                                RoundedCornerShape(14.dp)
+                            )
+                            .clickable { isSelectingDest = true }
                             .padding(vertical = 12.dp, horizontal = 12.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1490,58 +1523,32 @@ fun MapScreen(
                     }
                 }
 
-                // Многоэтажный пошаговый навигатор (если начало и конец на разных этажах)
-                if (destRoom != null || destAmenity != null) {
-                    if (originFloor != destFloor) {
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            // Шаг 1: Этаж отправления
+                // Пошаговый коридорный навигатор по этапам
+                if (routeSteps.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        routeSteps.forEachIndexed { index, step ->
+                            val isStepActive = selectedFloor == step.floor
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(10.dp))
-                                    .background(if (selectedFloor == originFloor) Color(0xFFFF6D00) else currentTheme.defaultRoomFill)
-                                    .clickable { selectedFloor = originFloor }
+                                    .background(if (isStepActive) Color(0xFFFF6D00) else currentTheme.defaultRoomFill)
+                                    .border(
+                                        1.dp,
+                                        if (isStepActive) Color(0xFFFF6D00) else currentTheme.strokeColor,
+                                        RoundedCornerShape(10.dp)
+                                    )
+                                    .clickable { selectedFloor = step.floor }
                                     .padding(horizontal = 12.dp, vertical = 6.dp)
                             ) {
                                 Text(
-                                    text = "1. Этаж $originFloor: До лестницы",
-                                    color = if (selectedFloor == originFloor) Color.White else currentTheme.textSecondary,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold
-                                )
-                            }
-
-                            // Шаг 2: Переход между этажами
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(currentTheme.defaultRoomFill)
-                                    .padding(horizontal = 12.dp, vertical = 6.dp)
-                            ) {
-                                Text(
-                                    text = if (originFloor < destFloor) "▲ Поднимитесь на $destFloor эт." else "▼ Спуститесь на $destFloor эт.",
-                                    color = Color(0xFFFF9800),
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Medium
-                                )
-                            }
-
-                            // Шаг 3: Этаж назначения
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(10.dp))
-                                    .background(if (selectedFloor == destFloor) Color(0xFFFF6D00) else currentTheme.defaultRoomFill)
-                                    .clickable { selectedFloor = destFloor }
-                                    .padding(horizontal = 12.dp, vertical = 6.dp)
-                            ) {
-                                Text(
-                                    text = "2. Этаж $destFloor: До цели",
-                                    color = if (selectedFloor == destFloor) Color.White else currentTheme.textSecondary,
+                                    text = "${index + 1}. ${step.description}",
+                                    color = if (isStepActive) Color.White else currentTheme.textSecondary,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.SemiBold
                                 )
@@ -1566,46 +1573,76 @@ fun MapScreen(
                             colors = CardDefaults.cardColors(containerColor = currentTheme.defaultRoomFill),
                             border = BorderStroke(1.dp, Color(0xFFFF6D00).copy(alpha = 0.5f))
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(14.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(0xFFFF6D00)),
-                                    contentAlignment = Alignment.Center
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(
-                                        Icons.Rounded.Navigation,
-                                        contentDescription = null,
-                                        tint = Color.White,
-                                        modifier = Modifier.size(20.dp)
-                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .clip(CircleShape)
+                                            .background(Color(0xFFFF6D00)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            Icons.Rounded.Navigation,
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(20.dp)
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Аудитория ${room.name}",
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 16.sp,
+                                            color = currentTheme.textPrimary
+                                        )
+                                        Text(
+                                            text = "Корпус ${room.building} • $selectedFloor этаж",
+                                            fontSize = 12.sp,
+                                            color = currentTheme.textSecondary
+                                        )
+                                    }
+                                    IconButton(onClick = { selectedRoom = null }) {
+                                        Icon(
+                                            Icons.Rounded.Close,
+                                            contentDescription = "Закрыть",
+                                            tint = currentTheme.textSecondary
+                                        )
+                                    }
                                 }
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "Аудитория ${room.name}",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 16.sp,
-                                        color = currentTheme.textPrimary
-                                    )
-                                    Text(
-                                        text = "Корпус ${room.building} • $selectedFloor этаж",
-                                        fontSize = 12.sp,
-                                        color = currentTheme.textSecondary
-                                    )
-                                }
-                                IconButton(onClick = { selectedRoom = null }) {
-                                    Icon(
-                                        Icons.Rounded.Close,
-                                        contentDescription = "Закрыть",
-                                        tint = currentTheme.textSecondary
-                                    )
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Button(
+                                        onClick = {
+                                            destRoom = room
+                                            destAmenity = null
+                                            destFloor = selectedFloor
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF6D00))
+                                    ) {
+                                        Text("Сюда", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    }
+                                    OutlinedButton(
+                                        onClick = {
+                                            originRoom = room
+                                            originAmenity = null
+                                            originFloor = selectedFloor
+                                            isOriginDefaultEntrance = false
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Text("Отсюда", fontSize = 13.sp, color = currentTheme.textPrimary)
+                                    }
                                 }
                             }
                         }
@@ -1637,57 +1674,220 @@ fun MapScreen(
                             colors = CardDefaults.cardColors(containerColor = currentTheme.defaultRoomFill),
                             border = BorderStroke(1.dp, badgeColor.copy(alpha = 0.7f))
                         ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(14.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(CircleShape)
-                                        .background(badgeColor),
-                                    contentAlignment = Alignment.Center
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    val icon = when {
-                                        amenity.type == "elevator" -> Icons.Rounded.Elevator
-                                        amenity.type == "stairs" -> Icons.Rounded.Stairs
-                                        else -> Icons.Rounded.Wc
+                                    Box(
+                                        modifier = Modifier
+                                            .size(40.dp)
+                                            .clip(CircleShape)
+                                            .background(badgeColor),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        val icon = when {
+                                            amenity.type == "elevator" -> Icons.Rounded.Elevator
+                                            amenity.type == "stairs" -> Icons.Rounded.Stairs
+                                            else -> Icons.Rounded.Wc
+                                        }
+                                        Icon(
+                                            icon,
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(22.dp)
+                                        )
                                     }
-                                    Icon(
-                                        icon,
-                                        contentDescription = null,
-                                        tint = Color.White,
-                                        modifier = Modifier.size(22.dp)
-                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = amenity.name,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 16.sp,
+                                            color = currentTheme.textPrimary
+                                        )
+                                        Text(
+                                            text = if (amenity.about.isNotBlank()) amenity.about else "$selectedFloor этаж",
+                                            fontSize = 12.sp,
+                                            color = currentTheme.textSecondary
+                                        )
+                                    }
+                                    IconButton(onClick = { selectedAmenity = null }) {
+                                        Icon(
+                                            Icons.Rounded.Close,
+                                            contentDescription = "Закрыть",
+                                            tint = currentTheme.textSecondary
+                                        )
+                                    }
                                 }
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = amenity.name,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 16.sp,
-                                        color = currentTheme.textPrimary
-                                    )
-                                    Text(
-                                        text = if (amenity.about.isNotBlank()) amenity.about else "$selectedFloor этаж",
-                                        fontSize = 12.sp,
-                                        color = currentTheme.textSecondary
-                                    )
-                                }
-                                IconButton(onClick = { selectedAmenity = null }) {
-                                    Icon(
-                                        Icons.Rounded.Close,
-                                        contentDescription = "Закрыть",
-                                        tint = currentTheme.textSecondary
-                                    )
+                                Spacer(modifier = Modifier.height(10.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Button(
+                                        onClick = {
+                                            destAmenity = amenity
+                                            destRoom = null
+                                            destFloor = selectedFloor
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFF6D00))
+                                    ) {
+                                        Text("Маршрут сюда", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    }
+                                    OutlinedButton(
+                                        onClick = {
+                                            originAmenity = amenity
+                                            originRoom = null
+                                            originFloor = selectedFloor
+                                            isOriginDefaultEntrance = false
+                                        },
+                                        modifier = Modifier.weight(1f),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Text("Отсюда", fontSize = 13.sp, color = currentTheme.textPrimary)
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
+        }
+
+        // Диалог выбора точки ("Откуда" или "Куда")
+        if (isSelectingOrigin || isSelectingDest) {
+            val title = if (isSelectingOrigin) "Откуда идём?" else "Куда направляемся?"
+            AlertDialog(
+                onDismissRequest = {
+                    isSelectingOrigin = false
+                    isSelectingDest = false
+                },
+                title = { Text(title, fontWeight = FontWeight.Bold) },
+                text = {
+                    Column(modifier = Modifier.fillMaxWidth().heightIn(max = 380.dp)) {
+                        Text(
+                            text = "Коснитесь объекта на плане или выберите из списка:",
+                            fontSize = 13.sp,
+                            color = currentTheme.textSecondary,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            if (isSelectingOrigin) {
+                                item {
+                                    Card(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                isOriginDefaultEntrance = true
+                                                originRoom = null
+                                                originAmenity = null
+                                                originFloor = 1
+                                                isSelectingOrigin = false
+                                            },
+                                        colors = CardDefaults.cardColors(containerColor = currentTheme.defaultRoomFill)
+                                    ) {
+                                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            Text("🚪 Главный вход (1 этаж)", fontWeight = FontWeight.Bold, color = Color(0xFFFF6D00))
+                                        }
+                                    }
+                                }
+                            }
+                            allFloors[selectedFloor]?.rooms?.let { rooms ->
+                                items(rooms.take(40)) { r ->
+                                    Card(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                if (isSelectingOrigin) {
+                                                    originRoom = r
+                                                    originAmenity = null
+                                                    originFloor = selectedFloor
+                                                    isOriginDefaultEntrance = false
+                                                    isSelectingOrigin = false
+                                                } else {
+                                                    destRoom = r
+                                                    destAmenity = null
+                                                    destFloor = selectedFloor
+                                                    isSelectingDest = false
+                                                }
+                                            },
+                                        colors = CardDefaults.cardColors(containerColor = currentTheme.defaultRoomFill)
+                                    ) {
+                                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            Text("Аудитория ${r.name} (${r.building} корпус)", color = currentTheme.textPrimary)
+                                        }
+                                    }
+                                }
+                            }
+                            allFloors[selectedFloor]?.amenities?.let { amenities ->
+                                items(amenities) { a ->
+                                    Card(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                if (isSelectingOrigin) {
+                                                    originAmenity = a
+                                                    originRoom = null
+                                                    originFloor = selectedFloor
+                                                    isOriginDefaultEntrance = false
+                                                    isSelectingOrigin = false
+                                                } else {
+                                                    destAmenity = a
+                                                    destRoom = null
+                                                    destFloor = selectedFloor
+                                                    isSelectingDest = false
+                                                }
+                                            },
+                                        colors = CardDefaults.cardColors(containerColor = currentTheme.defaultRoomFill)
+                                    ) {
+                                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                            Text("${a.name} (${a.about})", color = currentTheme.textPrimary)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        isSelectingOrigin = false
+                        isSelectingDest = false
+                    }) {
+                        Text("Отмена", color = Color(0xFFFF6D00))
+                    }
+                }
+            )
+        }
+
+        // Диалог уведомлений кампуса
+        if (showNotificationsDialog) {
+            AlertDialog(
+                onDismissRequest = { showNotificationsDialog = false },
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Rounded.Notifications, contentDescription = null, tint = Color(0xFFFF6D00))
+                        Spacer(Modifier.width(8.dp))
+                        Text("События и уведомления", fontWeight = FontWeight.Bold)
+                    }
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text("• Навигатор теперь строит маршруты строго по коридорной сети СПбГУТ (без прохождения сквозь стены).", fontSize = 13.sp)
+                        Text("• Главный вход выверен по архитектурной оси кампуса Большевиков 22к1.", fontSize = 13.sp)
+                        Text("• Доступны многоэтажные маршруты через переходы 1 и 3 этажей и лестничные клетки.", fontSize = 13.sp)
+                        Text("• В настройках доступно 8 цветовых тем оформления.", fontSize = 13.sp)
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showNotificationsDialog = false }) {
+                        Text("Закрыть", color = Color(0xFFFF6D00))
+                    }
+                }
+            )
         }
     }
 }

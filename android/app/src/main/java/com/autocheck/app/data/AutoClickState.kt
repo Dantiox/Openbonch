@@ -37,8 +37,17 @@ object AutoClickState {
     private val _stats = MutableStateFlow(Stats())
     val stats: StateFlow<Stats> = _stats.asStateFlow()
 
-    private val _schedule = MutableStateFlow<WeekScheduleData?>(null)
+    private val _currentGroup = MutableStateFlow("ИБТС-2613")
+    val currentGroup: StateFlow<String> = _currentGroup.asStateFlow()
+
+    private val _schedule = MutableStateFlow<WeekScheduleData?>(GroupScheduleProvider.getScheduleForGroup("ИБТС-2613"))
     val schedule: StateFlow<WeekScheduleData?> = _schedule.asStateFlow()
+
+    fun setGroup(group: String) {
+        val clean = group.trim().ifBlank { "ИБТС-2613" }
+        _currentGroup.value = clean
+        _schedule.value = GroupScheduleProvider.getScheduleForGroup(clean)
+    }
 
     fun updateSchedule(data: WeekScheduleData) {
         _schedule.value = data

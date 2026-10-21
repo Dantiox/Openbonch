@@ -132,6 +132,13 @@ class SutClient(
         if (text.contains(ERR_MSG)) return ScheduleResult.SessionExpired
 
         val doc = Jsoup.parse(text)
+        val docText = doc.text()
+        val groupMatch = Regex("""(?i)(?:групп[аы]:?\s*|\b)([А-ЯA-Z]{2,5}-\d{2,4}[а-яА-Яa-zA-Z]?)\b""").find(docText)
+        val detectedGroup = groupMatch?.groupValues?.getOrNull(1)
+        if (!detectedGroup.isNullOrBlank()) {
+            AutoClickState.setGroup(detectedGroup)
+        }
+
         val week = doc.selectFirst("h3")?.text()
             ?.substringAfter("№", missingDelimiterValue = "")
             ?.trim()
@@ -153,6 +160,13 @@ class SutClient(
         if (text.contains(ERR_MSG)) throw IllegalStateException("Сессия истекла")
 
         val doc = Jsoup.parse(text)
+        val docText = doc.text()
+        val groupMatch = Regex("""(?i)(?:групп[аы]:?\s*|\b)([А-ЯA-Z]{2,5}-\d{2,4}[а-яА-Яa-zA-Z]?)\b""").find(docText)
+        val detectedGroup = groupMatch?.groupValues?.getOrNull(1)
+        if (!detectedGroup.isNullOrBlank()) {
+            AutoClickState.setGroup(detectedGroup)
+        }
+
         val week = doc.selectFirst("h3")?.text()
             ?.substringAfter("№", missingDelimiterValue = "")
             ?.trim()
