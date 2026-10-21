@@ -795,11 +795,11 @@ private fun StatsCard(stats: Stats) {
                 .padding(vertical = 12.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
         ) {
-            StatItem(label = "Запросов", value = stats.checksCount.toString())
-            StatItem(label = "Отметок", value = stats.successfulClicks.toString(), accent = true)
+            StatItem(label = "Проверок", value = stats.cycles.toString())
+            StatItem(label = "Начато занятий", value = stats.started.toString(), accent = true)
             StatItem(
-                label = "Последний",
-                value = stats.lastCheckTime?.let { displayTime(it) } ?: "—",
+                label = "Последняя",
+                value = stats.lastCheck ?: "—",
             )
         }
     }
@@ -823,7 +823,7 @@ private fun StatItem(label: String, value: String, accent: Boolean = false) {
 }
 
 @Composable
-private fun LogRow(entry: LogEntry) {
+fun LogRow(entry: LogEntry) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -847,7 +847,7 @@ private fun LogRow(entry: LogEntry) {
         )
         Spacer(Modifier.width(8.dp))
         Text(
-            text = displayTime(entry.timestamp),
+            text = entry.displayTime(),
             style = MonoStyle,
             color = Ios.colors.tertiaryLabel,
         )

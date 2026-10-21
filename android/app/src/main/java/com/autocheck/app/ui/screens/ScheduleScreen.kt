@@ -252,7 +252,7 @@ fun ScheduleScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
-                Icons.AutoMirrored.rounded.KeyboardArrowLeft,
+                Icons.AutoMirrored.Rounded.KeyboardArrowLeft,
                 contentDescription = "Назад",
                 tint = Color(0xFFFF9800),
                 modifier = Modifier
@@ -325,7 +325,7 @@ fun ScheduleScreen(
             }
 
             Icon(
-                Icons.AutoMirrored.rounded.KeyboardArrowRight,
+                Icons.AutoMirrored.Rounded.KeyboardArrowRight,
                 contentDescription = "Вперед",
                 tint = Color(0xFFFF9800),
                 modifier = Modifier
@@ -505,7 +505,7 @@ fun ScheduleScreen(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                     Icon(
-                                        Icons.AutoMirrored.rounded.KeyboardArrowRight,
+                                        Icons.AutoMirrored.Rounded.KeyboardArrowRight,
                                         contentDescription = null,
                                         tint = Ios.colors.secondaryLabel,
                                         modifier = Modifier.size(16.dp)
@@ -536,7 +536,7 @@ fun ScheduleScreen(
                                         )
                                     }
                                     Icon(
-                                        Icons.AutoMirrored.rounded.KeyboardArrowRight,
+                                        Icons.AutoMirrored.Rounded.KeyboardArrowRight,
                                         contentDescription = null,
                                         tint = Ios.colors.secondaryLabel,
                                         modifier = Modifier.size(16.dp)
