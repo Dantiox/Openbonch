@@ -5,6 +5,9 @@ on:
     branches: [ "main", "master" ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-apk:
     name: Build Openbonch APK
@@ -28,10 +31,11 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon
 
-      - name: Rename APK for Distribution
+      - name: Locate and Rename APK for Distribution
         run: |
           mkdir -p dist
-          cp android/app/build/outputs/apk/debug/app-debug.apk dist/Openbonch-debug.apk
+          find android -name "*debug.apk" -exec cp {} dist/Openbonch-debug.apk \;
+          ls -la dist/
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
