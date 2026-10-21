@@ -1,13 +1,20 @@
 package com.autocheck.app.ui.screens
 
-import android.annotation.SuppressLint
 import android.content.Context
-import android.webkit.JavascriptInterface
-import android.webkit.WebView
-import android.webkit.WebViewClient
+import android.graphics.Paint
+import android.graphics.Typeface
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,30 +34,25 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.FitScreen
-import androidx.compose.material.icons.rounded.Layers
-import androidx.compose.material.icons.rounded.LocationOn
+import androidx.compose.material.icons.rounded.CropFree
 import androidx.compose.material.icons.rounded.MeetingRoom
+import androidx.compose.material.icons.rounded.Navigation
+import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.Remove
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.FloatingActionButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,686 +60,845 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.asComposePath
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
-import org.json.JSONArray
+import androidx.core.graphics.PathParser
 import org.json.JSONObject
 
-data class CampusRoom(
+// ─────────────────────────────────────────────────────────────
+// Данные схемы этажа и аудиторий
+// ─────────────────────────────────────────────────────────────
+
+data class RoomShape(
     val id: String,
-    val title: String,
-    val floor: Int,
-    val building: String,
-    val about: String,
+    val name: String,
+    val shape: String,
     val x: Float,
     val y: Float,
+    val w: Float,
+    val h: Float,
+    val colorType: String,
+    val building: String,
+    val points: List<Offset> = emptyList()
 )
 
-private fun loadRooms(context: Context): List<CampusRoom> {
-    return try {
-        val jsonStr = context.assets.open("maps/rooms.json").bufferedReader().use { it.readText() }
-        val array = JSONArray(jsonStr)
-        val list = ArrayList<CampusRoom>(array.length())
-        for (i in 0 until array.length()) {
-            val obj = array.getJSONObject(i)
-            list.add(
-                CampusRoom(
-                    id = obj.optString("id"),
-                    title = obj.optString("title"),
-                    floor = obj.optInt("floor", 1),
-                    building = obj.optString("building", "1"),
-                    about = obj.optString("about"),
-                    x = obj.optDouble("x", 0.0).toFloat(),
-                    y = obj.optDouble("y", 0.0).toFloat(),
-                )
-            )
-        }
-        list
-    } catch (_: Exception) {
-        emptyList()
-    }
-}
+data class FloorMapData(
+    val floor: Int,
+    val walls: List<Path>,
+    val courtyards: List<Path>,
+    val rooms: List<RoomShape>
+)
 
-private fun loadSvg(context: Context, floor: Int): String {
-    return try {
-        val raw = context.assets.open("maps/${floor}k.svg").bufferedReader().use { it.readText() }
-        raw.replace(Regex("<\\?xml[^\\?]+\\?>"), "")
-            .replace(Regex("<!--[\\s\\S]*?-->"), "")
-            .trim()
-    } catch (_: Exception) {
-        ""
-    }
-}
+private fun loadFloors(context: Context): Map<Int, FloorMapData> {
+    val result = mutableMapOf<Int, FloorMapData>()
+    try {
+        val jsonStr = context.assets.open("maps/campus_floors.json").bufferedReader().use { it.readText() }
+        val root = JSONObject(jsonStr)
 
-private fun buildMapHtml(svgContent: String, isDark: Boolean, query: String?): String {
-    val bgColor = if (isDark) "#121418" else "#F1F5F9"
-    val wallColor = if (isDark) "#222630" else "#FFFFFF"
-    val wallStroke = if (isDark) "#4B5563" else "#94A3B8"
-    val roomColor = if (isDark) "#2E3646" else "#F8FAFC"
-    val roomStroke = if (isDark) "#64748B" else "#64748B"
-    val textColor = if (isDark) "#F8FAFC" else "#0F172A"
-    val courtyardColor = if (isDark) "#181A20" else "#E2E8F0"
-    val corridorColor = if (isDark) "#252B3B" else "#EFF6FF"
+        for (floor in 1..7) {
+            val key = floor.toString()
+            if (!root.has(key)) continue
+            val obj = root.getJSONObject(key)
 
-    val sanitizedQuery = query?.replace("'", "\\'")?.replace("\"", "\\\"") ?: ""
-
-    return """
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=1800, initial-scale=0.22, minimum-scale=0.15, maximum-scale=3.5, user-scalable=yes">
-<style>
-* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html, body {
-    margin: 0;
-    padding: 0;
-    width: 1800px;
-    height: 1800px;
-    background-color: $bgColor;
-    user-select: none;
-    -webkit-user-select: none;
-    overflow: visible;
-}
-svg {
-    width: 1800px;
-    height: 1800px;
-    display: block;
-}
-/* Стены и контуры здания */
-svg path[fill="#FDFDFD"], svg polygon[fill="#FDFDFD"] {
-    fill: $wallColor !important;
-    stroke: $wallStroke !important;
-    stroke-width: 2px !important;
-}
-/* Внутренние дворы */
-svg path[fill="#F9FCF7"], svg polygon[fill="#F9FCF7"] {
-    fill: $courtyardColor !important;
-}
-/* Коридоры */
-svg .st1 {
-    fill: $corridorColor !important;
-    stroke: $wallStroke !important;
-    stroke-width: 1.5px !important;
-}
-/* Аудитории и кабинеты */
-svg .st2 {
-    fill: $roomColor !important;
-    stroke: $roomStroke !important;
-    stroke-width: 1.5px !important;
-    cursor: pointer;
-    transition: fill 0.15s, stroke 0.15s;
-}
-svg .st2:active {
-    fill: #3B82F6 !important;
-    stroke: #60A5FA !important;
-}
-/* Номера аудиторий */
-svg text, svg .st3, svg .st4 {
-    fill: $textColor !important;
-    font-family: -apple-system, BlinkMacSystemFont, Roboto, "Segoe UI", sans-serif !important;
-    font-size: 19px !important;
-    font-weight: 800 !important;
-    pointer-events: none;
-}
-/* Линии переходов */
-svg .st5 {
-    stroke: #F59E0B !important;
-    stroke-width: 2px !important;
-}
-/* Подсветка найденной аудитории */
-.room-highlight {
-    fill: #FF6D00 !important;
-    stroke: #FFE082 !important;
-    stroke-width: 6px !important;
-    filter: drop-shadow(0 0 18px rgba(255, 109, 0, 1)) !important;
-}
-.room-selected {
-    fill: #2563EB !important;
-    stroke: #93C5FD !important;
-    stroke-width: 5px !important;
-    filter: drop-shadow(0 0 16px rgba(37, 99, 235, 0.95)) !important;
-}
-</style>
-</head>
-<body>
-$svgContent
-
-<script>
-document.addEventListener('click', function(e) {
-    var target = e.target;
-    while (target && target.tagName !== 'svg' && target !== document.body) {
-        var id = target.getAttribute('id');
-        if (id && (id.indexOf('k1-') === 0 || id.indexOf('k2-') === 0)) {
-            var prev = document.querySelectorAll('.room-selected');
-            for (var i = 0; i < prev.length; i++) prev[i].classList.remove('room-selected');
-            target.classList.add('room-selected');
-            if (window.AndroidBridge && window.AndroidBridge.onRoomClicked) {
-                window.AndroidBridge.onRoomClicked(id);
+            // Стены
+            val wallsList = mutableListOf<Path>()
+            val wallsArr = obj.optJSONArray("walls")
+            if (wallsArr != null) {
+                for (i in 0 until wallsArr.length()) {
+                    val d = wallsArr.getString(i)
+                    try {
+                        wallsList.add(PathParser.createPathFromPathData(d).asComposePath())
+                    } catch (_: Exception) {}
+                }
             }
-            return;
-        }
-        target = target.parentElement;
-    }
-});
 
-function highlight(query) {
-    if (!query) return;
-    var q = query.trim().toLowerCase();
-    
-    var prev = document.querySelectorAll('.room-highlight');
-    for (var i = 0; i < prev.length; i++) prev[i].classList.remove('room-highlight');
-
-    var found = document.getElementById(q) || document.getElementById('k1-' + q) || document.getElementById('k2-' + q);
-    if (!found) {
-        var texts = document.querySelectorAll('text');
-        for (var j = 0; j < texts.length; j++) {
-            var val = (texts[j].textContent || '').trim().toLowerCase();
-            if (val === q || val.indexOf(q) !== -1) {
-                found = texts[j];
-                break;
+            // Дворы
+            val courtyardsList = mutableListOf<Path>()
+            val courtsArr = obj.optJSONArray("courtyards")
+            if (courtsArr != null) {
+                for (i in 0 until courtsArr.length()) {
+                    val d = courtsArr.getString(i)
+                    try {
+                        courtyardsList.add(PathParser.createPathFromPathData(d).asComposePath())
+                    } catch (_: Exception) {}
+                }
             }
+
+            // Аудитории
+            val roomsList = mutableListOf<RoomShape>()
+            val roomsArr = obj.optJSONArray("rooms")
+            if (roomsArr != null) {
+                for (i in 0 until roomsArr.length()) {
+                    val rObj = roomsArr.getJSONObject(i)
+                    val pts = mutableListOf<Offset>()
+                    val ptsArr = rObj.optJSONArray("points")
+                    if (ptsArr != null) {
+                        for (p in 0 until ptsArr.length()) {
+                            val pt = ptsArr.getJSONArray(p)
+                            pts.add(Offset(pt.getDouble(0).toFloat(), pt.getDouble(1).toFloat()))
+                        }
+                    }
+
+                    roomsList.add(
+                        RoomShape(
+                            id = rObj.optString("id"),
+                            name = rObj.optString("name"),
+                            shape = rObj.optString("shape", "rect"),
+                            x = rObj.optDouble("x", 0.0).toFloat(),
+                            y = rObj.optDouble("y", 0.0).toFloat(),
+                            w = rObj.optDouble("w", 0.0).toFloat(),
+                            h = rObj.optDouble("h", 0.0).toFloat(),
+                            colorType = rObj.optString("color", "slate"),
+                            building = rObj.optString("building", "1"),
+                            points = pts
+                        )
+                    )
+                }
+            }
+
+            result[floor] = FloorMapData(floor, wallsList, courtyardsList, roomsList)
         }
-    }
-
-    if (found) {
-        found.classList.add('room-highlight');
-        try {
-            found.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
-        } catch(e) {}
-    }
+    } catch (_: Exception) {}
+    return result
 }
 
-function focusBuilding(bldg) {
-    if (bldg === 1) {
-        window.scrollTo({ left: 800, top: 400, behavior: 'smooth' });
-    } else if (bldg === 2) {
-        window.scrollTo({ left: 50, top: 400, behavior: 'smooth' });
-    } else {
-        window.scrollTo({ left: 350, top: 350, behavior: 'smooth' });
-    }
-}
+// ─────────────────────────────────────────────────────────────
+// Главный экран Навигатора кампуса (Стиль Bonch Go 1:1)
+// ─────────────────────────────────────────────────────────────
 
-window.onload = function() {
-    var q = "$sanitizedQuery";
-    if (q) {
-        setTimeout(function() { highlight(q); }, 150);
-    }
-};
-</script>
-</body>
-</html>
-""".trimIndent()
-}
-
-class MapBridge(
-    private val onRoomSelected: (String) -> Unit
-) {
-    @JavascriptInterface
-    fun onRoomClicked(roomId: String) {
-        onRoomSelected(roomId)
-    }
-}
-
-@SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun MapScreen(
     bottomPadding: Dp,
     highlightRoom: String? = null
 ) {
     val context = LocalContext.current
-    val isDark = isSystemInDarkTheme()
-    val allRooms = remember { loadRooms(context) }
+    val allFloors = remember { loadFloors(context) }
 
+    var selectedCampus by remember { mutableIntStateOf(0) } // 0: СПбГУТ, 1: СПбКТ
     var selectedFloor by remember { mutableIntStateOf(1) }
-    var selectedBuildingTab by remember { mutableIntStateOf(0) } // 0: Все, 1: Корпус 1, 2: Корпус 2
     var searchQuery by remember { mutableStateOf(highlightRoom ?: "") }
-    var selectedRoom by remember { mutableStateOf<CampusRoom?>(null) }
-    var showSuggestions by remember { mutableStateOf(false) }
+    var selectedRoom by remember { mutableStateOf<RoomShape?>(null) }
+    var originRoom by remember { mutableStateOf<RoomShape?>(null) }
+    var destRoom by remember { mutableStateOf<RoomShape?>(null) }
+    var isSelectingOrigin by remember { mutableStateOf(false) }
 
-    var webViewInstance by remember { mutableStateOf<WebView?>(null) }
+    // Масштаб и панорамирование
+    var scale by remember { mutableFloatStateOf(0.72f) }
+    var offsetX by remember { mutableFloatStateOf(-300f) }
+    var offsetY by remember { mutableFloatStateOf(-120f) }
 
-    // Обработка перехода из расписания
+    val currentFloorData = allFloors[selectedFloor]
+
+    // Настройка шрифта для отрисовки номеров комнат
+    val textPaint = remember {
+        Paint().apply {
+            isAntiAlias = true
+            color = android.graphics.Color.WHITE
+            textAlign = Paint.Align.CENTER
+            typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
+            textSize = 13f
+        }
+    }
+
+    // Сброс масштаба в центр здания
+    fun resetView() {
+        scale = 0.72f
+        offsetX = -300f
+        offsetY = -120f
+    }
+
+    // Центрирование на аудитории
+    fun centerOnRoom(room: RoomShape) {
+        scale = 1.6f
+        offsetX = -room.x * scale + 500f
+        offsetY = -room.y * scale + 800f
+    }
+
+    // Обработка внешнего перехода из расписания
     LaunchedEffect(highlightRoom) {
         if (!highlightRoom.isNullOrBlank()) {
             searchQuery = highlightRoom
-            val match = allRooms.firstOrNull { 
-                it.title.equals(highlightRoom, ignoreCase = true) ||
-                it.id.equals(highlightRoom, ignoreCase = true) ||
-                it.about.contains(highlightRoom, ignoreCase = true)
-            }
-            if (match != null) {
-                selectedFloor = match.floor
-                selectedRoom = match
-                selectedBuildingTab = if (match.building == "2") 2 else 1
-            } else {
-                val digits = highlightRoom.filter { it.isDigit() }
-                if (digits.length >= 3) {
-                    val floorCandidate = digits.first().digitToIntOrNull()
-                    if (floorCandidate != null && floorCandidate in 1..7) {
-                        selectedFloor = floorCandidate
-                    }
+            // Ищем комнату по всем этажам
+            for (f in 1..7) {
+                val match = allFloors[f]?.rooms?.firstOrNull { 
+                    it.name.equals(highlightRoom, ignoreCase = true) ||
+                    it.id.equals(highlightRoom, ignoreCase = true)
+                }
+                if (match != null) {
+                    selectedFloor = f
+                    selectedRoom = match
+                    destRoom = match
+                    centerOnRoom(match)
+                    break
                 }
             }
         }
     }
 
-    // Загрузка карты при смене этажа или темы
-    LaunchedEffect(selectedFloor, isDark, webViewInstance) {
-        val wv = webViewInstance
-        if (wv != null) {
-            val svg = loadSvg(context, selectedFloor)
-            if (svg.isNotEmpty()) {
-                val html = buildMapHtml(svg, isDark, searchQuery)
-                wv.loadDataWithBaseURL("https://lk.sut.ru/", html, "text/html", "UTF-8", null)
-            }
-        }
-    }
-
-    // Фокус на корпусе
-    LaunchedEffect(selectedBuildingTab, webViewInstance) {
-        val wv = webViewInstance
-        if (wv != null) {
-            wv.evaluateJavascript("focusBuilding($selectedBuildingTab);", null)
-        }
-    }
-
-    // Поиск совпадений для автодополнения
-    val matchingRooms = remember(searchQuery, allRooms) {
+    // Подсказки поиска
+    val searchSuggestions = remember(searchQuery, allFloors) {
         if (searchQuery.trim().length >= 2) {
             val q = searchQuery.trim().lowercase()
-            allRooms.filter { 
-                it.title.lowercase().contains(q) || it.about.lowercase().contains(q)
-            }.take(8)
+            val list = mutableListOf<Pair<Int, RoomShape>>()
+            for (f in 1..7) {
+                allFloors[f]?.rooms?.forEach { r ->
+                    if (r.name.lowercase().contains(q) || r.id.lowercase().contains(q)) {
+                        list.add(f to r)
+                    }
+                }
+            }
+            list.take(6)
         } else {
             emptyList()
         }
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(bottom = bottomPadding)
+            .background(Color(0xFF0E1015)) // Глубокий темный фон
     ) {
-        // Заголовок экрана
-        Column(
+        // ─────────────────────────────────────────────────────────────
+        // Слой 1: Точечная координатная сетка (Blueprint Grid)
+        // ─────────────────────────────────────────────────────────────
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val step = 32.dp.toPx()
+            var x = 0f
+            while (x < size.width) {
+                var y = 0f
+                while (y < size.height) {
+                    drawCircle(
+                        color = Color(0xFF1E232E),
+                        radius = 1.4f,
+                        center = Offset(x, y)
+                    )
+                    y += step
+                }
+                x += step
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────
+        // Слой 2: Интерактивная векторная карта (GPU Canvas с жестами)
+        // ─────────────────────────────────────────────────────────────
+        Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 10.dp)
+                .fillMaxSize()
+                .clipToBounds()
+                .pointerInput(Unit) {
+                    detectTransformGestures { _, pan, zoom, _ ->
+                        scale = (scale * zoom).coerceIn(0.35f, 4.5f)
+                        offsetX += pan.x
+                        offsetY += pan.y
+                    }
+                }
+                .pointerInput(Unit) {
+                    detectTapGestures { tapOffset ->
+                        val localX = (tapOffset.x - offsetX) / scale
+                        val localY = (tapOffset.y - offsetY) / scale
+
+                        val tapped = currentFloorData?.rooms?.firstOrNull { r ->
+                            localX >= r.x && localX <= r.x + r.w &&
+                            localY >= r.y && localY <= r.y + r.h
+                        }
+
+                        if (tapped != null) {
+                            if (isSelectingOrigin) {
+                                originRoom = tapped
+                                isSelectingOrigin = false
+                            } else {
+                                selectedRoom = tapped
+                                destRoom = tapped
+                                searchQuery = tapped.name
+                            }
+                        }
+                    }
+                }
         ) {
-            Text(
-                text = "Навигатор кампуса",
-                fontSize = 26.sp,
-                fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.onBackground
+            Canvas(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                        translationX = offsetX
+                        translationY = offsetY
+                    }
+            ) {
+                if (currentFloorData != null) {
+                    // 1. Внешние контуры стен и переходов
+                    for (wall in currentFloorData.walls) {
+                        drawPath(wall, color = Color(0xFF161B24))
+                        drawPath(wall, color = Color(0xFF2A3241), style = Stroke(width = 2.5f))
+                    }
+
+                    // 2. Внутренние световые дворы (темные вырезы)
+                    for (court in currentFloorData.courtyards) {
+                        drawPath(court, color = Color(0xFF0B0E14))
+                        drawPath(court, color = Color(0xFF1E2430), style = Stroke(width = 1.5f))
+                    }
+
+                    // 3. Стрелочка входа (как на скриншоте)
+                    if (selectedFloor == 1) {
+                        val arrowX = 1080f
+                        val arrowY = 150f
+                        val arrowPath = Path().apply {
+                            moveTo(arrowX, arrowY)
+                            lineTo(arrowX - 16f, arrowY - 24f)
+                            lineTo(arrowX + 16f, arrowY - 24f)
+                            close()
+                        }
+                        drawPath(arrowPath, color = Color(0xFF8B949E))
+                    }
+
+                    // 4. Отрисовка аудиторий с семантическими цветами
+                    for (room in currentFloorData.rooms) {
+                        val isSelected = selectedRoom?.id == room.id || 
+                                        (searchQuery.isNotBlank() && room.name.equals(searchQuery, ignoreCase = true))
+
+                        val fillColor = when {
+                            isSelected -> Color(0xFFFF6D00)
+                            room.colorType == "green" -> Color(0xFF2E7D32)
+                            room.colorType == "orange" -> Color(0xFFE65100)
+                            room.colorType == "yellow" -> Color(0xFFF57F17)
+                            room.colorType == "pink" -> Color(0xFFC2185B)
+                            room.colorType == "cyan" -> Color(0xFF00838F)
+                            else -> Color(0xFF1E2430) // Обычные аудитории
+                        }
+
+                        val strokeColor = when {
+                            isSelected -> Color(0xFFFFD54F)
+                            room.colorType == "green" -> Color(0xFF81C784)
+                            room.colorType == "orange" -> Color(0xFFFFB74D)
+                            room.colorType == "yellow" -> Color(0xFFFFF176)
+                            room.colorType == "pink" -> Color(0xFFF06292)
+                            room.colorType == "cyan" -> Color(0xFF4DD0E1)
+                            else -> Color(0xFF2D3545)
+                        }
+
+                        if (room.shape == "rect") {
+                            drawRoundRect(
+                                color = fillColor,
+                                topLeft = Offset(room.x, room.y),
+                                size = Size(room.w, room.h),
+                                cornerRadius = CornerRadius(5f)
+                            )
+                            drawRoundRect(
+                                color = strokeColor,
+                                topLeft = Offset(room.x, room.y),
+                                size = Size(room.w, room.h),
+                                cornerRadius = CornerRadius(5f),
+                                style = Stroke(width = if (isSelected) 3.5f else 1.2f)
+                            )
+                        } else if (room.points.isNotEmpty()) {
+                            val polyPath = Path().apply {
+                                moveTo(room.points[0].x, room.points[0].y)
+                                for (p in 1 until room.points.size) {
+                                    lineTo(room.points[p].x, room.points[p].y)
+                                }
+                                close()
+                            }
+                            drawPath(polyPath, color = fillColor)
+                            drawPath(polyPath, color = strokeColor, style = Stroke(width = if (isSelected) 3.5f else 1.2f))
+                        }
+
+                        // Номер аудитории внутри плашки
+                        if (scale >= 0.65f && room.name.isNotEmpty()) {
+                            val cx = room.x + room.w / 2f
+                            val cy = room.y + room.h / 2f + 4.5f
+                            drawContext.canvas.nativeCanvas.drawText(room.name, cx, cy, textPaint)
+                        }
+                    }
+
+                    // 5. Отрисовка маршрута (если выбраны Откуда и Куда)
+                    if (originRoom != null && destRoom != null && selectedFloor == originRoom?.building?.toIntOrNull()) {
+                        val oX = originRoom!!.x + originRoom!!.w / 2f
+                        val oY = originRoom!!.y + originRoom!!.h / 2f
+                        val dX = destRoom!!.x + destRoom!!.w / 2f
+                        val dY = destRoom!!.y + destRoom!!.h / 2f
+
+                        drawLine(
+                            color = Color(0xFFFF6D00),
+                            start = Offset(oX, oY),
+                            end = Offset(dX, dY),
+                            strokeWidth = 5f
+                        )
+                        drawCircle(color = Color(0xFF00E676), radius = 8f, center = Offset(oX, oY))
+                        drawCircle(color = Color(0xFFFF6D00), radius = 8f, center = Offset(dX, dY))
+                    }
+                }
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────
+        // Слой 3: Верхний левый переключатель кампусов (СПбГУТ / СПбКТ)
+        // ─────────────────────────────────────────────────────────────
+        Row(
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(top = 16.dp, start = 16.dp)
+                .clip(RoundedCornerShape(18.dp))
+                .background(Color(0xFF161A22).copy(alpha = 0.95f))
+                .border(1.dp, Color(0xFF262C38), RoundedCornerShape(18.dp))
+                .padding(4.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(if (selectedCampus == 0) Color(0xFFFF6D00) else Color.Transparent)
+                    .clickable { selectedCampus = 0 }
+                    .padding(horizontal = 16.dp, vertical = 9.dp)
+            ) {
+                Text(
+                    text = "СПбГУТ",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 13.sp
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(if (selectedCampus == 1) Color(0xFFFF6D00) else Color.Transparent)
+                    .clickable { selectedCampus = 1 }
+                    .padding(horizontal = 16.dp, vertical = 9.dp)
+            ) {
+                Text(
+                    text = "СПбКТ",
+                    color = if (selectedCampus == 1) Color.White else Color(0xFF8B949E),
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 13.sp
+                )
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────
+        // Слой 4: Правая вертикальная панель этажей и зума (Скриншот 1:1)
+        // ─────────────────────────────────────────────────────────────
+        Card(
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 16.dp, end = 16.dp),
+            shape = RoundedCornerShape(24.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = Color(0xFF161A22).copy(alpha = 0.94f)
+            ),
+            border = BorderStroke(1.dp, Color(0xFF262C38))
+        ) {
+            Column(
+                modifier = Modifier.padding(6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                for (floor in 7 downTo 1) {
+                    val isCurrent = selectedFloor == floor
+                    Box(
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(RoundedCornerShape(13.dp))
+                            .background(if (isCurrent) Color(0xFFFF6D00) else Color.Transparent)
+                            .clickable { selectedFloor = floor },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "$floor",
+                            color = if (isCurrent) Color.White else Color(0xFF8B949E),
+                            fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium,
+                            fontSize = 15.sp
+                        )
+                    }
+                }
+
+                HorizontalDivider(
+                    modifier = Modifier
+                        .width(22.dp)
+                        .padding(vertical = 4.dp),
+                    color = Color(0xFF262C38)
+                )
+
+                // Сброс масштаба в центр
+                IconButton(
+                    onClick = { resetView() },
+                    modifier = Modifier.size(38.dp)
+                ) {
+                    Icon(
+                        Icons.Rounded.CropFree,
+                        contentDescription = "Центр",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+
+                // Приблизить (+)
+                IconButton(
+                    onClick = { scale = (scale * 1.35f).coerceIn(0.35f, 4.5f) },
+                    modifier = Modifier.size(38.dp)
+                ) {
+                    Icon(
+                        Icons.Rounded.Add,
+                        contentDescription = "Приблизить",
+                        tint = Color.White,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+
+                // Отдалить (-)
+                IconButton(
+                    onClick = { scale = (scale / 1.35f).coerceIn(0.35f, 4.5f) },
+                    modifier = Modifier.size(38.dp)
+                ) {
+                    Icon(
+                        Icons.Rounded.Remove,
+                        contentDescription = "Отдалить",
+                        tint = Color.White,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────
+        // Слой 5: Бейдж «🟠 БЕТА» слева внизу
+        // ─────────────────────────────────────────────────────────────
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(start = 16.dp, bottom = bottomPadding + 220.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(Color(0xFF161A22).copy(alpha = 0.9f))
+                .border(1.dp, Color(0xFF262C38), RoundedCornerShape(12.dp))
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(Color(0xFFFF6D00))
             )
+            Spacer(modifier = Modifier.width(6.dp))
             Text(
-                text = "Пр. Большевиков, 22 • Векторные схемы этажей",
-                fontSize = 12.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = "БЕТА",
+                color = Color(0xFFCBD5E1),
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold
             )
         }
 
-        // Поле поиска с автокомплитом
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-        ) {
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = {
-                    searchQuery = it
-                    showSuggestions = it.trim().length >= 2
-                },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Поиск: 504/1, 210/2, столовая, деканат...") },
-                leadingIcon = { 
-                    Icon(Icons.Rounded.Search, contentDescription = null, tint = MaterialTheme.colorScheme.primary) 
-                },
-                trailingIcon = {
-                    if (searchQuery.isNotEmpty()) {
-                        IconButton(onClick = {
-                            searchQuery = ""
-                            selectedRoom = null
-                            showSuggestions = false
-                            webViewInstance?.evaluateJavascript("highlight('');", null)
-                        }) {
-                            Icon(Icons.Rounded.Close, contentDescription = "Очистить")
-                        }
-                    }
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(14.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = MaterialTheme.colorScheme.primary,
-                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
-                )
-            )
-
-            // Выпадающий список подсказок
-            if (showSuggestions && matchingRooms.isNotEmpty()) {
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 60.dp)
-                        .heightIn(max = 240.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    )
-                ) {
-                    LazyColumn(modifier = Modifier.fillMaxWidth()) {
-                        items(matchingRooms) { room ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable {
-                                        searchQuery = room.title
-                                        selectedRoom = room
-                                        selectedFloor = room.floor
-                                        selectedBuildingTab = if (room.building == "2") 2 else 1
-                                        showSuggestions = false
-                                        webViewInstance?.evaluateJavascript("highlight(${JSONObject.quote(room.title)});", null)
-                                    }
-                                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    Icons.Rounded.MeetingRoom,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(20.dp)
+        // ─────────────────────────────────────────────────────────────
+        // Слой 6: Выпадающий список подсказок поиска (Autocomplete)
+        // ─────────────────────────────────────────────────────────────
+        if (searchSuggestions.isNotEmpty()) {
+            Card(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 16.dp, bottom = bottomPadding + 210.dp)
+                    .heightIn(max = 240.dp),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = Color(0xFF1A1F2B)),
+                border = BorderStroke(1.dp, Color(0xFF2D3545))
+            ) {
+                LazyColumn(modifier = Modifier.fillMaxWidth()) {
+                    items(searchSuggestions) { (floor, room) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    selectedFloor = floor
+                                    selectedRoom = room
+                                    destRoom = room
+                                    searchQuery = room.name
+                                    centerOnRoom(room)
+                                }
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Rounded.MeetingRoom,
+                                contentDescription = null,
+                                tint = Color(0xFFFF6D00),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Аудитория ${room.name}",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = Color.White
                                 )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = room.title,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 15.sp,
-                                        color = MaterialTheme.colorScheme.onSurface
-                                    )
-                                    Text(
-                                        text = "Этаж ${room.floor} • Корпус ${room.building} — ${room.about}",
-                                        fontSize = 12.sp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                Text(
+                                    text = "Корпус ${room.building} • $floor этаж",
+                                    fontSize = 12.sp,
+                                    color = Color(0xFF94A3B8)
+                                )
+                            }
+                        }
+                        HorizontalDivider(color = Color(0xFF262C38))
+                    }
+                }
+            }
+        }
+
+        // ─────────────────────────────────────────────────────────────
+        // Слой 7: Нижняя карточка навигации (Bottom Sheet точно по фото)
+        // ─────────────────────────────────────────────────────────────
+        Card(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(bottom = bottomPadding),
+            shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF161922)),
+            border = BorderStroke(1.dp, Color(0xFF262C38))
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 18.dp, vertical = 12.dp)
+            ) {
+                // Drag handle
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .width(36.dp)
+                        .height(4.dp)
+                        .clip(RoundedCornerShape(2.dp))
+                        .background(Color(0xFF374151))
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Статус расписания
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Rounded.Schedule,
+                        contentDescription = null,
+                        tint = Color(0xFFFF9800),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Пары на сегодня закончились",
+                        fontSize = 13.sp,
+                        color = Color(0xFFCBD5E1),
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Поисковая строка с колокольчиком
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = { searchQuery = it },
+                        modifier = Modifier.weight(1f),
+                        placeholder = {
+                            Text(
+                                text = "Аудитория, кафедра, буфет...",
+                                fontSize = 14.sp,
+                                color = Color(0xFF64748B)
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Rounded.Search,
+                                contentDescription = null,
+                                tint = Color(0xFF94A3B8),
+                                modifier = Modifier.size(20.dp)
+                            )
+                        },
+                        trailingIcon = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = {
+                                    searchQuery = ""
+                                    selectedRoom = null
+                                    destRoom = null
+                                }) {
+                                    Icon(
+                                        Icons.Rounded.Close,
+                                        contentDescription = "Очистить",
+                                        tint = Color(0xFF94A3B8)
                                     )
                                 }
                             }
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-                        }
-                    }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Вкладки корпусов: Все / Корпус 1 / Корпус 2
-        TabRow(
-            selectedTabIndex = selectedBuildingTab,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            containerColor = Color.Transparent,
-            contentColor = MaterialTheme.colorScheme.primary,
-            divider = {}
-        ) {
-            val tabs = listOf("Все корпуса", "Корпус 1", "Корпус 2")
-            tabs.forEachIndexed { index, title ->
-                Tab(
-                    selected = selectedBuildingTab == index,
-                    onClick = { selectedBuildingTab = index },
-                    text = { 
-                        Text(
-                            text = title, 
-                            fontWeight = if (selectedBuildingTab == index) FontWeight.Bold else FontWeight.Medium,
-                            fontSize = 13.sp
-                        ) 
-                    }
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(6.dp))
-
-        // Выбор этажа: 1..7
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                Icons.Rounded.Layers,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp),
-                tint = MaterialTheme.colorScheme.primary
-            )
-            Text(
-                text = "Этаж:",
-                fontWeight = FontWeight.Bold,
-                fontSize = 13.sp,
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            for (floor in 1..7) {
-                FilterChip(
-                    selected = selectedFloor == floor,
-                    onClick = {
-                        selectedFloor = floor
-                    },
-                    label = { 
-                        Text(
-                            text = "$floor",
-                            fontSize = 13.sp,
-                            fontWeight = if (selectedFloor == floor) FontWeight.Bold else FontWeight.Normal
-                        ) 
-                    },
-                    shape = RoundedCornerShape(10.dp),
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primary,
-                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary
-                    )
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Интерактивная карта (SVG через WebView)
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .clip(RoundedCornerShape(18.dp))
-                .background(if (isDark) Color(0xFF121418) else Color(0xFFF1F5F9))
-        ) {
-            AndroidView(
-                modifier = Modifier.fillMaxSize(),
-                factory = { ctx ->
-                    WebView(ctx).apply {
-                        settings.javaScriptEnabled = true
-                        settings.domStorageEnabled = true
-                        settings.builtInZoomControls = true
-                        settings.displayZoomControls = false
-                        settings.useWideViewPort = true
-                        settings.loadWithOverviewMode = true
-                        setBackgroundColor(android.graphics.Color.TRANSPARENT)
-
-                        addJavascriptInterface(
-                            MapBridge { roomId ->
-                                val clicked = allRooms.firstOrNull { 
-                                    it.id.equals(roomId, ignoreCase = true) ||
-                                    it.id.replace("-", "").equals(roomId.replace("-", ""), ignoreCase = true)
-                                }
-                                if (clicked != null) {
-                                    selectedRoom = clicked
-                                    searchQuery = clicked.title
-                                } else {
-                                    selectedRoom = CampusRoom(
-                                        id = roomId,
-                                        title = roomId.replace("k1-", "").replace("k2-", ""),
-                                        floor = selectedFloor,
-                                        building = if (roomId.startsWith("k2")) "2" else "1",
-                                        about = "Помещение на $selectedFloor этаже",
-                                        x = 0f,
-                                        y = 0f
-                                    )
-                                }
-                            },
-                            "AndroidBridge"
+                        },
+                        singleLine = true,
+                        shape = RoundedCornerShape(16.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = Color(0xFF1F2430),
+                            unfocusedContainerColor = Color(0xFF1F2430),
+                            focusedBorderColor = Color(0xFFFF6D00),
+                            unfocusedBorderColor = Color.Transparent,
+                            focusedTextColor = Color.White,
+                            unfocusedTextColor = Color.White
                         )
+                    )
 
-                        val svg = loadSvg(ctx, selectedFloor)
-                        if (svg.isNotEmpty()) {
-                            val html = buildMapHtml(svg, isDark, searchQuery)
-                            loadDataWithBaseURL("https://lk.sut.ru/", html, "text/html", "UTF-8", null)
-                        }
-
-                        webViewInstance = this
-                    }
-                },
-                update = { wv ->
-                    webViewInstance = wv
-                }
-            )
-
-            // Бейдж этажа
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(12.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color.Black.copy(alpha = 0.65f))
-                    .padding(horizontal = 10.dp, vertical = 5.dp)
-            ) {
-                Text(
-                    text = "План: $selectedFloor этаж • Корпус ${if (selectedBuildingTab == 0) "1 и 2" else "$selectedBuildingTab"}",
-                    color = Color.White,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-
-            // Кнопки зума и сброса (+ / − / ⤢)
-            Column(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                FloatingActionButton(
-                    onClick = { webViewInstance?.zoomIn() },
-                    modifier = Modifier.size(42.dp),
-                    shape = CircleShape,
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp)
-                ) {
-                    Icon(Icons.Rounded.Add, contentDescription = "Приблизить", modifier = Modifier.size(20.dp))
-                }
-                FloatingActionButton(
-                    onClick = { webViewInstance?.zoomOut() },
-                    modifier = Modifier.size(42.dp),
-                    shape = CircleShape,
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp)
-                ) {
-                    Icon(Icons.Rounded.Remove, contentDescription = "Отдалить", modifier = Modifier.size(20.dp))
-                }
-                FloatingActionButton(
-                    onClick = { 
-                        webViewInstance?.evaluateJavascript("window.scrollTo({ left: 350, top: 350, behavior: 'smooth' });", null)
-                    },
-                    modifier = Modifier.size(42.dp),
-                    shape = CircleShape,
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 4.dp)
-                ) {
-                    Icon(Icons.Rounded.FitScreen, contentDescription = "По центру", modifier = Modifier.size(20.dp))
-                }
-            }
-        }
-
-        // Карточка выбранной аудитории внизу
-        val activeRoom = selectedRoom ?: allRooms.firstOrNull { 
-            searchQuery.isNotBlank() && (it.title.equals(searchQuery, ignoreCase = true) || it.id.equals(searchQuery, ignoreCase = true)) 
-        }
-
-        if (activeRoom != null) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                shape = RoundedCornerShape(18.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                ),
-                elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
+                    // Кнопка колокольчика
                     Box(
                         modifier = Modifier
-                            .size(46.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.primary),
+                            .size(52.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .background(Color(0xFF1F2430))
+                            .clickable { },
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            Icons.Rounded.LocationOn,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier.size(26.dp)
+                            Icons.Rounded.Notifications,
+                            contentDescription = "Уведомления",
+                            tint = Color(0xFF94A3B8),
+                            modifier = Modifier.size(22.dp)
                         )
                     }
-                    Spacer(modifier = Modifier.width(14.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = if (activeRoom.title.isNotBlank()) "Аудитория ${activeRoom.title}" else "Помещение ${activeRoom.id}",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 17.sp,
-                            color = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
-                        Text(
-                            text = "Корпус ${activeRoom.building} • ${activeRoom.floor} этаж",
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        if (activeRoom.about.isNotBlank() && activeRoom.about != activeRoom.title) {
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Кнопки маршрутизатора: "Откуда" / "Куда"
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    // Откуда
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color(0xFF1F2430))
+                            .border(
+                                1.dp,
+                                if (isSelectingOrigin) Color(0xFF00E676) else Color.Transparent,
+                                RoundedCornerShape(14.dp)
+                            )
+                            .clickable { isSelectingOrigin = true }
+                            .padding(vertical = 12.dp, horizontal = 16.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF00E676))
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = activeRoom.about,
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.85f),
-                                maxLines = 2
+                                text = originRoom?.name ?: "Откуда",
+                                color = if (originRoom != null) Color.White else Color(0xFF94A3B8),
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium
                             )
                         }
                     }
-                    IconButton(onClick = {
-                        selectedRoom = null
-                        searchQuery = ""
-                        webViewInstance?.evaluateJavascript("highlight('');", null)
-                    }) {
-                        Icon(
-                            Icons.Rounded.Close,
-                            contentDescription = "Закрыть",
-                            tint = MaterialTheme.colorScheme.onPrimaryContainer
-                        )
+
+                    // Куда
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color(0xFF1F2430))
+                            .clickable { }
+                            .padding(vertical = 12.dp, horizontal = 16.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(8.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFFFF6D00))
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = destRoom?.name ?: "Куда",
+                                color = if (destRoom != null) Color.White else Color(0xFF94A3B8),
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+
+                // Всплывающая карточка деталей выбранной аудитории
+                AnimatedVisibility(
+                    visible = selectedRoom != null,
+                    enter = slideInVertically { it / 2 } + fadeIn(),
+                    exit = slideOutVertically { it / 2 } + fadeOut()
+                ) {
+                    val room = selectedRoom
+                    if (room != null) {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 12.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF1F2430)),
+                            border = BorderStroke(1.dp, Color(0xFFFF6D00).copy(alpha = 0.5f))
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFFFF6D00)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.Navigation,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Аудитория ${room.name}",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp,
+                                        color = Color.White
+                                    )
+                                    Text(
+                                        text = "Корпус ${room.building} • $selectedFloor этаж",
+                                        fontSize = 12.sp,
+                                        color = Color(0xFF94A3B8)
+                                    )
+                                }
+                                IconButton(onClick = { selectedRoom = null }) {
+                                    Icon(
+                                        Icons.Rounded.Close,
+                                        contentDescription = "Закрыть",
+                                        tint = Color(0xFF94A3B8)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
