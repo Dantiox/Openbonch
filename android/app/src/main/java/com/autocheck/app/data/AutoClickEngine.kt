@@ -122,6 +122,10 @@ class AutoClickEngine(private val newClient: () -> SutClient) {
             }
 
             val ok = schedule as? ScheduleResult.Ok ?: return Outcome.FAILED
+            runCatching {
+                val detailed = client.fetchDetailedSchedule()
+                state.updateSchedule(detailed)
+            }
             if (ok.lessonIds.isEmpty()) {
                 state.info(tagged(tag, "Нет активных занятий"), LogCategory.CHECK)
             } else {

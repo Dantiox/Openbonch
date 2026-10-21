@@ -32,8 +32,10 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.CalendarToday
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -70,12 +72,16 @@ import com.autocheck.app.ui.components.rememberExporter
 import com.autocheck.app.ui.components.floating
 import com.autocheck.app.ui.screens.HomeScreen
 import com.autocheck.app.ui.screens.LogScreen
+import com.autocheck.app.ui.screens.MapScreen
 import com.autocheck.app.ui.screens.ResponseViewerScreen
+import com.autocheck.app.ui.screens.ScheduleScreen
 import com.autocheck.app.ui.screens.SettingsScreen
 import com.autocheck.app.ui.theme.Ios
 
 private enum class Tab(val label: String, val icon: ImageVector) {
-    Home("Главная", Icons.Rounded.Home),
+    Schedule("Пары", Icons.Rounded.CalendarToday),
+    Home("Отметка", Icons.Rounded.Home),
+    Map("Карта", Icons.Rounded.Map),
     Log("Журнал", Icons.Rounded.History),
     Settings("Настройки", Icons.Rounded.Settings),
 }
@@ -85,11 +91,12 @@ private val TabBarSpace: Dp = 88.dp
 
 @Composable
 fun AppRoot(vm: MainViewModel) {
-    var tab by rememberSaveable { mutableStateOf(Tab.Home) }
+    var tab by rememberSaveable { mutableStateOf(Tab.Schedule) }
     // Запись журнала, ответ сервера которой сейчас открыт на весь экран
     var viewingId by rememberSaveable { mutableStateOf<Long?>(null) }
     // Растёт при каждом повторном нажатии на уже открытую вкладку: экран возвращается в начало
     var reselect by remember { mutableIntStateOf(0) }
+    var mapHighlightRoom by rememberSaveable { mutableStateOf<String?>(null) }
     val context = LocalContext.current
 
     val status by AutoClickState.status.collectAsStateWithLifecycle()
@@ -152,6 +159,14 @@ fun AppRoot(vm: MainViewModel) {
                     .statusBarsPadding(),
             ) { current ->
                 when (current) {
+                    Tab.Schedule -> ScheduleScreen(
+                        bottomPadding = bottomInset,
+                        onNavigateToMap = { room ->
+                            mapHighlightRoom = room
+                            tab = Tab.Map
+                        },
+                    )
+
                     Tab.Home -> HomeScreen(
                         status = status,
                         stats = stats,
@@ -163,6 +178,11 @@ fun AppRoot(vm: MainViewModel) {
                         onToggle = onToggle,
                         onOpenLog = { tab = Tab.Log },
                         onOpenSettings = { tab = Tab.Settings },
+                    )
+
+                    Tab.Map -> MapScreen(
+                        bottomPadding = bottomInset,
+                        highlightRoom = mapHighlightRoom,
                     )
 
                     Tab.Log -> LogScreen(

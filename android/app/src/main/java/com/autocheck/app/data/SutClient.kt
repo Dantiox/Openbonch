@@ -134,6 +134,88 @@ class SutClient(
         return ScheduleResult.Ok(week, ids)
     }
 
+    /** Полная загрузка расписания с парсингом предметов, аудиторий и кнопок отметки */
+    suspend fun fetchDetailedSchedule(): WeekScheduleData {
+        val text = http.newCall(Request.Builder().url(SCHEDULE_URL).get().build())
+            .text(ResponseKind.SCHEDULE) { it.contains(ERR_MSG) }
+        if (text.contains(ERR_MSG)) throw IllegalStateException("Сессия истекла")
+
+        val doc = Jsoup.parse(text)
+        val week = doc.selectFirst("h3")?.text()
+            ?.substringAfter("№", missingDelimiterValue = "")
+            ?.trim()
+            ?.split(Regex("\\s+"))
+            ?.firstOrNull()
+            ?.takeIf { it.isNotEmpty() }
+            ?: "1"
+
+        val openZanRegex = Regex("""open_zan\(\s*(\d+)\s*,\s*(\d+)\s*\)""")
+        val days = mutableListOf<DayScheduleItem>()
+        var currentDayName = ""
+        var currentLessons = mutableListOf<LessonItem>()
+
+        val tables = doc.select("table.simple-little-table, table")
+        for (table in tables) {
+            val rows = table.select("tr")
+            for (row in rows) {
+                val cells = row.select("td, th")
+                if (cells.isEmpty()) continue
+
+                val firstText = cells[0].text().trim()
+                val isHeader = cells.size == 1 || listOf("Понедельник", "Вторник", "Среда", "Четверг", "Пятница", "Суббота")
+                    .any { firstText.contains(it, ignoreCase = true) }
+
+                if (isHeader) {
+                    if (currentDayName.isNotEmpty() && currentLessons.isNotEmpty()) {
+                        days.add(DayScheduleItem(weekday = currentDayName, lessons = currentLessons.toList()))
+                        currentLessons.clear()
+                    }
+                    currentDayName = firstText
+                    continue
+                }
+
+                if (cells.size >= 2) {
+                    val time = cells[0].text().trim()
+                    val desc = cells[1].text().trim()
+                    val cellHtml = cells[1].html() + (if (cells.size > 2) cells.last().html() else "")
+
+                    var canCheckIn = false
+                    var lessonId: String? = null
+                    var checkInWeek: String? = null
+
+                    openZanRegex.find(cellHtml)?.let { match ->
+                        canCheckIn = true
+                        lessonId = match.groupValues.getOrNull(1)
+                        checkInWeek = match.groupValues.getOrNull(2)
+                    }
+
+                    if (time.isNotEmpty() || desc.isNotEmpty()) {
+                        val audMatch = Regex("""(?i)(?:ауд\.?\s*|каб\.?\s*)([0-9]{3,4}(?:/[0-9]+)?|[0-9]{3}[а-яА-Я]?)""").find(desc)
+                            ?: Regex("""\b([0-9]{3}/[12])\b""").find(desc)
+                        val aud = audMatch?.groupValues?.getOrNull(1) ?: ""
+
+                        currentLessons.add(
+                            LessonItem(
+                                time = time,
+                                name = desc,
+                                auditorium = aud,
+                                lessonId = lessonId,
+                                canCheckIn = canCheckIn,
+                                checkInWeek = checkInWeek,
+                            )
+                        )
+                    }
+                }
+            }
+            if (currentDayName.isNotEmpty() && currentLessons.isNotEmpty()) {
+                days.add(DayScheduleItem(weekday = currentDayName, lessons = currentLessons.toList()))
+                currentLessons = mutableListOf()
+            }
+        }
+
+        return WeekScheduleData(weekNumber = week, days = days)
+    }
+
     /** @return true, если сервер ответил непустым телом (занятие начато). */
     suspend fun startLesson(lessonId: String, week: String): Boolean {
         val url: HttpUrl = SCHEDULE_URL.toHttpUrl().newBuilder()

@@ -37,6 +37,13 @@ object AutoClickState {
     private val _stats = MutableStateFlow(Stats())
     val stats: StateFlow<Stats> = _stats.asStateFlow()
 
+    private val _schedule = MutableStateFlow<WeekScheduleData?>(null)
+    val schedule: StateFlow<WeekScheduleData?> = _schedule.asStateFlow()
+
+    fun updateSchedule(data: WeekScheduleData) {
+        _schedule.value = data
+    }
+
     /** Настройки уведомлений: UI меняет, сервис применяет сразу, без перезапуска. */
     private val _notificationPrefs = MutableStateFlow(NotificationPrefs())
     val notificationPrefs: StateFlow<NotificationPrefs> = _notificationPrefs.asStateFlow()
