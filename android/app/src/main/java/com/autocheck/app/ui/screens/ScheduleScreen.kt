@@ -206,7 +206,7 @@ fun ScheduleScreen(
                                     if (lesson.lessonId != null && lesson.checkInWeek != null) {
                                         val ok = client.startLesson(lesson.lessonId, lesson.checkInWeek)
                                         if (ok) {
-                                            AutoClickState.success("Отмечен на паре: ${lesson.name}")
+                                            AutoClickState.success("Занятие подтверждено: ${lesson.name}")
                                             refreshSchedule()
                                         }
                                     }
@@ -293,7 +293,7 @@ fun LessonCard(
                             .padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
                         Text(
-                            text = "ОТМЕТКА ДОСТУПНА",
+                            text = "ДОСТУПНО ПОДТВЕРЖДЕНИЕ",
                             color = Color.White,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
@@ -354,7 +354,7 @@ fun LessonCard(
                 ) {
                     Icon(Icons.Rounded.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Отметиться прямо сейчас", fontWeight = FontWeight.Bold)
+                    Text("Подтвердить занятие", fontWeight = FontWeight.Bold)
                 }
             }
         }

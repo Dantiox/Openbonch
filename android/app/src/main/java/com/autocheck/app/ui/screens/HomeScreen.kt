@@ -153,7 +153,7 @@ fun HomeScreen(
         Hero(
             status = status,
             subtitle = when (status) {
-                EngineStatus.STOPPED -> "Нажмите, чтобы запустить автопосещение"
+                EngineStatus.STOPPED -> "Нажмите, чтобы включить автоматизацию"
                 EngineStatus.CONNECTING -> "Выполняется вход в личный кабинет"
                 EngineStatus.RUNNING -> "Проверка расписания каждые $timeoutSec с"
                 EngineStatus.ERROR -> "Подробности в журнале"

@@ -82,7 +82,7 @@ import com.autocheck.app.ui.theme.Ios
 
 private enum class Tab(val label: String, val icon: ImageVector) {
     Schedule("Пары", Icons.Rounded.CalendarToday),
-    Home("Отметка", Icons.Rounded.Home),
+    Home("Статус", Icons.Rounded.Home),
     Map("Карта", Icons.Rounded.Map),
     Log("Журнал", Icons.Rounded.History),
     Settings("Настройки", Icons.Rounded.Settings),

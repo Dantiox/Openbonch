@@ -3,7 +3,7 @@ name = "openbonch-cli"
 version = "0.1.0"
 edition = "2021"
 authors = ["Dantiox"]
-description = "Fast multiplatform CLI client and auto-checkin daemon for SPbSUT (Bonch) students"
+description = "Fast multiplatform CLI client and local workflow automation tool for student services"
 license = "AGPL-3.0-or-later"
 
 [[bin]]

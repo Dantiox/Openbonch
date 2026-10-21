@@ -3,7 +3,7 @@ name = "openbonch-core"
 version = "0.1.0"
 edition = "2021"
 authors = ["Dantiox"]
-description = "Core portable FOSS engine for SPbSUT (Bonch) student services"
+description = "Portable FOSS core engine for student schedule and local automation"
 license = "AGPL-3.0-or-later"
 
 [dependencies]
