@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=no">
+    <title>Openbonch Campus Map</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            touch-action: none;
+        }
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: #1a1b1e;
+            user-select: none;
+            -webkit-user-select: none;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+        body.light-theme {
+            background-color: #f8f9fa;
+        }
+        #map-container {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+        #viewport {
+            transform-origin: 0 0;
+            width: 1800px;
+            height: 1800px;
+            position: absolute;
+            left: 0;
+            top: 0;
+        }
+        svg {
+            width: 1800px;
+            height: 1800px;
+            display: block;
+        }
+        /* Стилизация SVG в темной теме */
+        body:not(.light-theme) svg path[fill="#FDFDFD"],
+        body:not(.light-theme) svg polygon[fill="#FDFDFD"] {
+            fill: #22242a !important;
+        }
+        body:not(.light-theme) svg path[fill="#F9FCF7"],
+        body:not(.light-theme) svg polygon[fill="#F9FCF7"] {
+            fill: #18191d !important;
+        }
+        body:not(.light-theme) svg .st0 {
+            fill: #2a2d35 !important;
+        }
+        body:not(.light-theme) svg .st1 {
+            fill: #2e323b !important;
+            stroke: #4f5360 !important;
+        }
+        body:not(.light-theme) svg .st2 {
+            fill: #343943 !important;
+            stroke: #595f6e !important;
+            cursor: pointer;
+            transition: fill 0.2s, stroke 0.2s;
+        }
+        body:not(.light-theme) svg .st2:hover,
+        body:not(.light-theme) svg .st2:active {
+            fill: #434c5c !important;
+        }
+        body:not(.light-theme) svg text,
+        body:not(.light-theme) svg .st3,
+        body:not(.light-theme) svg .st4 {
+            fill: #e1e3e8 !important;
+            font-family: system-ui, -apple-system, sans-serif !important;
+            font-weight: bold !important;
+            pointer-events: none;
+        }
+        body:not(.light-theme) svg .st5 {
+            stroke: #ff9800 !important;
+            stroke-width: 1.5px !important;
+        }
+
+        /* Стилизация в светлой теме */
+        body.light-theme svg .st1 {
+            fill: #ffffff !important;
+            stroke: #b0b4be !important;
+        }
+        body.light-theme svg .st2 {
+            fill: #eef2f7 !important;
+            stroke: #9fa6b2 !important;
+            cursor: pointer;
+        }
+        body.light-theme svg text {
+            fill: #1e2024 !important;
+            font-family: system-ui, -apple-system, sans-serif !important;
+            font-weight: bold !important;
+            pointer-events: none;
+        }
+
+        /* Подсветка найденной или нажатой аудитории */
+        .room-highlight {
+            fill: #ff6d00 !important;
+            stroke: #ffd54f !important;
+            stroke-width: 4px !important;
+            filter: drop-shadow(0 0 16px rgba(255, 109, 0, 0.95)) !important;
+        }
+        .room-selected {
+            fill: #2979ff !important;
+            stroke: #90caf9 !important;
+            stroke-width: 4px !important;
+            filter: drop-shadow(0 0 14px rgba(41, 121, 255, 0.9)) !important;
+        }
+
+        /* Кнопки управления масштабом на экране */
+        #controls {
+            position: absolute;
+            right: 16px;
+            bottom: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 100;
+        }
+        .btn-ctrl {
+            width: 46px;
+            height: 46px;
+            border-radius: 14px;
+            background: rgba(35, 38, 47, 0.85);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            color: #ffffff;
+            font-size: 22px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            cursor: pointer;
+        }
+        body.light-theme .btn-ctrl {
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+            color: #1a1b1e;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .btn-ctrl:active {
+            transform: scale(0.92);
+        }
+    </style>
+</head>
+<body>
+    <div id="map-container">
+        <div id="viewport"></div>
+        <div id="controls">
+            <div class="btn-ctrl" onclick="zoomBy(1.35)">+</div>
+            <div class="btn-ctrl" onclick="zoomBy(0.74)">−</div>
+            <div class="btn-ctrl" onclick="resetView()" style="font-size: 15px;">⤢</div>
+        </div>
+    </div>
+
+    <script>
+        const container = document.getElementById('map-container');
+        const viewport = document.getElementById('viewport');
+
+        let scale = 1;
+        let translateX = 0;
+        let translateY = 0;
+
+        let isDragging = false;
+        let startX = 0;
+        let startY = 0;
+        let initialTranslateX = 0;
+        let initialTranslateY = 0;
+
+        let initialPinchDistance = null;
+        let initialPinchScale = 1;
+        let pinchCenterX = 0;
+        let pinchCenterY = 0;
+
+        let lastTouchTime = 0;
+        let touchStartPos = { x: 0, y: 0 };
+
+        function updateTransform(smooth = false) {
+            viewport.style.transition = smooth ? 'transform 0.25s ease-out' : 'none';
+            viewport.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scale})`;
+        }
+
+        function zoomBy(factor) {
+            const rect = container.getBoundingClientRect();
+            const cx = rect.width / 2;
+            const cy = rect.height / 2;
+            zoomAt(factor, cx, cy, true);
+        }
+
+        function zoomAt(factor, clientX, clientY, smooth = false) {
+            const rect = container.getBoundingClientRect();
+            const x = clientX - rect.left;
+            const y = clientY - rect.top;
+
+            const newScale = Math.min(Math.max(scale * factor, 0.2), 5.0);
+            const actualFactor = newScale / scale;
+
+            translateX = x - (x - translateX) * actualFactor;
+            translateY = y - (y - translateY) * actualFactor;
+            scale = newScale;
+
+            updateTransform(smooth);
+        }
+
+        function resetView(smooth = true) {
+            const rect = container.getBoundingClientRect();
+            scale = Math.min(rect.width / 1800, rect.height / 1800) * 0.95;
+            translateX = (rect.width - 1800 * scale) / 2;
+            translateY = (rect.height - 1800 * scale) / 2;
+            updateTransform(smooth);
+        }
+
+        function centerOn(svgX, svgY, targetScale = 1.8, smooth = true) {
+            const rect = container.getBoundingClientRect();
+            scale = targetScale;
+            translateX = rect.width / 2 - svgX * scale;
+            translateY = rect.height / 2 - svgY * scale;
+            updateTransform(smooth);
+        }
+
+        // Сенсорное управление
+        container.addEventListener('touchstart', (e) => {
+            if (e.touches.length === 1) {
+                isDragging = true;
+                startX = e.touches[0].clientX;
+                startY = e.touches[0].clientY;
+                initialTranslateX = translateX;
+                initialTranslateY = translateY;
+                touchStartPos = { x: startX, y: startY };
+            } else if (e.touches.length === 2) {
+                isDragging = false;
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                initialPinchDistance = Math.hypot(dx, dy);
+                initialPinchScale = scale;
+                pinchCenterX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+                pinchCenterY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+            }
+        }, { passive: false });
+
+        container.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (e.touches.length === 1 && isDragging) {
+                const dx = e.touches[0].clientX - startX;
+                const dy = e.touches[0].clientY - startY;
+                translateX = initialTranslateX + dx;
+                translateY = initialTranslateY + dy;
+                updateTransform(false);
+            } else if (e.touches.length === 2 && initialPinchDistance) {
+                const dx = e.touches[0].clientX - e.touches[1].clientX;
+                const dy = e.touches[0].clientY - e.touches[1].clientY;
+                const currentDistance = Math.hypot(dx, dy);
+                const factor = currentDistance / initialPinchDistance;
+                zoomAt(factor / (scale / initialPinchScale), pinchCenterX, pinchCenterY, false);
+            }
+        }, { passive: false });
+
+        container.addEventListener('touchend', (e) => {
+            if (e.touches.length === 0) {
+                isDragging = false;
+                initialPinchDistance = null;
+
+                // Проверка на тап
+                const touch = e.changedTouches[0];
+                const distMoved = Math.hypot(touch.clientX - touchStartPos.x, touch.clientY - touchStartPos.y);
+                const now = Date.now();
+
+                if (distMoved < 10) {
+                    if (now - lastTouchTime < 300) {
+                        // Двойной тап
+                        zoomBy(1.8);
+                    } else {
+                        // Одиночный тап - поиск аудитории
+                        handleElementClick(touch.clientX, touch.clientY);
+                    }
+                    lastTouchTime = now;
+                }
+            }
+        });
+
+        function handleElementClick(clientX, clientY) {
+            const elem = document.elementFromPoint(clientX, clientY);
+            if (!elem) return;
+
+            let target = elem;
+            while (target && target !== viewport) {
+                const id = target.getAttribute('id');
+                if (id && (id.startsWith('k1-') || id.startsWith('k2-'))) {
+                    selectRoomElement(target);
+                    return;
+                }
+                target = target.parentElement;
+            }
+        }
+
+        function clearHighlights() {
+            document.querySelectorAll('.room-highlight, .room-selected').forEach(el => {
+                el.classList.remove('room-highlight');
+                el.classList.remove('room-selected');
+            });
+        }
+
+        function selectRoomElement(elem) {
+            clearHighlights();
+            elem.classList.add('room-selected');
+
+            const id = elem.getAttribute('id');
+            if (window.AndroidBridge && window.AndroidBridge.onRoomClicked) {
+                window.AndroidBridge.onRoomClicked(id);
+            }
+        }
+
+        // Публичные методы для вызова из Kotlin
+        window.loadSvg = function(svgContent) {
+            viewport.innerHTML = svgContent;
+            clearHighlights();
+            setTimeout(resetView, 30);
+        };
+
+        window.setTheme = function(isDark) {
+            if (isDark) {
+                document.body.classList.remove('light-theme');
+            } else {
+                document.body.classList.add('light-theme');
+            }
+        };
+
+        window.highlightRoom = function(query) {
+            clearHighlights();
+            if (!query) return false;
+
+            const q = query.trim().toLowerCase();
+            const svg = viewport.querySelector('svg');
+            if (!svg) return false;
+
+            // 1. Поиск по id элемента
+            let found = svg.querySelector(`[id="${q}"]`) || 
+                        svg.querySelector(`[id="k1-${q}"]`) || 
+                        svg.querySelector(`[id="k2-${q}"]`);
+
+            // 2. Если не найден, поиск по тексту
+            if (!found) {
+                const texts = svg.querySelectorAll('text');
+                for (const t of texts) {
+                    const textVal = (t.textContent || '').trim().toLowerCase();
+                    if (textVal === q || textVal.includes(q)) {
+                        // Ищем родительский или соседний элемент
+                        const x = parseFloat(t.getAttribute('x') || 0);
+                        const y = parseFloat(t.getAttribute('y') || 0);
+                        found = t;
+                        break;
+                    }
+                }
+            }
+
+            if (found) {
+                found.classList.add('room-highlight');
+                try {
+                    const bbox = found.getBBox();
+                    centerOn(bbox.x + bbox.width / 2, bbox.y + bbox.height / 2, 2.2, true);
+                } catch(e) {
+                    // getBBox fallback
+                }
+                return true;
+            }
+            return false;
+        };
+
+        window.focusBuilding = function(buildingNum) {
+            if (buildingNum === 1) {
+                // Корпус 1 (правая половина)
+                centerOn(1350, 900, 1.3, true);
+            } else if (buildingNum === 2) {
+                // Корпус 2 (левая половина)
+                centerOn(450, 900, 1.3, true);
+            } else {
+                resetView(true);
+            }
+        };
+
+        window.addEventListener('resize', () => {
+            resetView(false);
+        });
+
+        // Начальная инициализация
+        window.onload = () => {
+            resetView(false);
+        };
+    </script>
+</body>
+</html>
