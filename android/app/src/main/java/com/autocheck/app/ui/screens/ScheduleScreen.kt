@@ -2,6 +2,7 @@ package com.autocheck.app.ui.screens
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -78,7 +79,11 @@ fun ScheduleScreen(
             errorMessage = null
             try {
                 val store = SettingsStore(context)
-                val account = store.loadAccount()
+                val account = store.loadAccounts().firstOrNull { it.isComplete }
+                if (account == null) {
+                    errorMessage = "Войдите в личный кабинет в разделе Настройки"
+                    return@launch
+                }
                 val client = SutClient()
                 if (account.type == com.autocheck.app.data.AccountType.TOKEN) {
                     client.useToken(account.token)
@@ -191,7 +196,7 @@ fun ScheduleScreen(
                             onMarkClass = {
                                 scope.launch {
                                     val store = SettingsStore(context)
-                                    val account = store.loadAccount()
+                                    val account = store.loadAccounts().firstOrNull { it.isComplete } ?: return@launch
                                     val client = SutClient()
                                     if (account.type == com.autocheck.app.data.AccountType.TOKEN) {
                                         client.useToken(account.token)
@@ -269,7 +274,7 @@ fun LessonCard(
                         Icons.Rounded.Schedule,
                         contentDescription = null,
                         modifier = Modifier.size(16.dp),
-                        color = MaterialTheme.colorScheme.primary
+                        tint = MaterialTheme.colorScheme.primary
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
@@ -310,13 +315,14 @@ fun LessonCard(
 
             if (lesson.auditorium.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
-                Surface(
-                    onClick = { onNavigateToMap(lesson.auditorium) },
-                    shape = RoundedCornerShape(8.dp),
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+                        .clickable { onNavigateToMap(lesson.auditorium) }
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
